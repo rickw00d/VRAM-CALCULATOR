@@ -1,0 +1,751 @@
+<title>VRAM 記憶體估算器</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#f5f7f9; --surface:#ffffff; --surface-2:#eef2f5; --surface-3:#e4eaef;
+    --border:#d3dce2; --border-strong:#b8c4cd;
+    --text:#14212b; --text-2:#4a5a66; --text-3:#94a3ad; --text-muted:#768694;
+    --accent:#0891a8; --accent-soft:#d6eef2;
+    --ok:#15803d; --ok-soft:#d6efdd; --warn:#b45309; --warn-soft:#f6e6c8; --over:#c02626; --over-soft:#f6d9d9;
+    --w-weight:#0891a8; --w-kv:#c77d0a; --w-act:#8a6fb0; --w-oh:#7d8d99;
+    --on-accent:#ffffff;
+    --shadow:0 1px 2px rgba(20,33,43,.06),0 8px 24px -12px rgba(20,33,43,.18);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0c1116; --surface:#141b22; --surface-2:#1b242d; --surface-3:#233039;
+      --border:#2a3843; --border-strong:#3a4c58;
+      --text:#e6edf2; --text-2:#a7b6c1; --text-3:#6f8492; --text-muted:#8497a3;
+      --accent:#2bbdd4; --accent-soft:#123039;
+      --ok:#4ade80; --ok-soft:#12301d; --warn:#fbbf24; --warn-soft:#3a2c0e; --over:#f87171; --over-soft:#3a1616;
+      --w-weight:#2bbdd4; --w-kv:#eab35a; --w-act:#b49fd8; --w-oh:#8497a3;
+      --on-accent:#04222a;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0c1116; --surface:#141b22; --surface-2:#1b242d; --surface-3:#233039;
+    --border:#2a3843; --border-strong:#3a4c58;
+    --text:#e6edf2; --text-2:#a7b6c1; --text-3:#6f8492; --text-muted:#8497a3;
+    --accent:#2bbdd4; --accent-soft:#123039;
+    --ok:#4ade80; --ok-soft:#12301d; --warn:#fbbf24; --warn-soft:#3a2c0e; --over:#f87171; --over-soft:#3a1616;
+    --w-weight:#2bbdd4; --w-kv:#eab35a; --w-act:#b49fd8; --w-oh:#8497a3;
+    --on-accent:#04222a;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -14px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"IBM Plex Sans",system-ui,"Noto Sans TC",sans-serif;
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:clamp(20px,4vw,44px) clamp(16px,3vw,32px) 64px}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  header{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:18px; margin-bottom:26px}
+  .brand{display:flex; flex-direction:column; gap:8px}
+  .eyebrow{font-family:"IBM Plex Sans Condensed"; text-transform:uppercase; letter-spacing:.14em; font-size:.72rem; font-weight:600; color:var(--accent)}
+  h1{margin:0; font-size:clamp(1.5rem,3.4vw,2.15rem); font-weight:700; letter-spacing:-.02em; text-wrap:balance}
+  .sub{color:var(--text-2); font-size:.95rem; max-width:56ch; margin:0}
+  .theme-btn{
+    font-family:inherit; font-size:.82rem; color:var(--text-2); background:var(--surface);
+    border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; display:flex; gap:7px; align-items:center;
+  }
+  .theme-btn:hover{border-color:var(--border-strong); color:var(--text)}
+
+  .scenarios{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:24px}
+  .scn{
+    flex:1 1 220px; text-align:left; cursor:pointer; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:13px 15px; display:flex; flex-direction:column; gap:3px;
+    font-family:inherit; color:var(--text); transition:border-color .15s, transform .1s;
+  }
+  .scn:hover{border-color:var(--accent); transform:translateY(-1px)}
+  .scn[aria-pressed="true"]{border-color:var(--accent); background:var(--accent-soft)}
+  .scn .st{font-weight:600; font-size:.92rem; display:flex; align-items:center; gap:8px}
+  .scn .sd{font-size:.78rem; color:var(--text-muted); line-height:1.4}
+  .scn .ic{font-size:1.05rem}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important}}
+
+  .grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); gap:22px; align-items:start}
+  /* minmax(0,1fr) 而非 1fr:允許欄位縮到內容寬度以下,表格才會在自己的容器內捲動 */
+  @media (max-width:880px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow)}
+  .card-h{padding:16px 20px 0; display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+  .card-h h2{margin:0; font-size:.82rem; text-transform:uppercase; letter-spacing:.1em; font-family:"IBM Plex Sans Condensed"; color:var(--text-2); font-weight:600}
+  .card-b{padding:16px 20px 20px}
+
+  .field{margin-bottom:15px}
+  .field:last-child{margin-bottom:0}
+  label{display:block; font-size:.82rem; font-weight:500; color:var(--text-2); margin-bottom:6px}
+  label .hint{color:var(--text-3); font-weight:400}
+  select,input[type=number]{
+    width:100%; font-family:"IBM Plex Mono",monospace; font-size:.9rem; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:9px 11px;
+  }
+  select{font-family:"IBM Plex Sans"}
+  input:focus,select:focus{border-color:var(--accent)}
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .row-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+
+  .seg{display:flex; flex-wrap:wrap; gap:4px; background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:3px}
+  .seg button{
+    flex:1 1 auto; min-width:62px; font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--text-2); background:transparent;
+    border:none; border-radius:6px; padding:7px 4px; cursor:pointer; white-space:nowrap;
+  }
+  .seg button[aria-pressed="true"]{background:var(--accent); color:var(--on-accent); font-weight:600}
+  .seg button:hover:not([aria-pressed="true"]):not(:disabled){color:var(--text)}
+  .seg button:disabled{opacity:.32; cursor:not-allowed; text-decoration:line-through}
+
+  .arch{margin-top:4px; padding:12px; background:var(--surface-2); border:1px dashed var(--border-strong); border-radius:10px}
+  .arch summary{cursor:pointer; font-size:.8rem; color:var(--text-2); font-weight:500}
+  .arch .row,.arch .row-3{margin-top:10px}
+  .arch label{font-size:.74rem}
+  .arch input{padding:7px 9px; font-size:.82rem}
+  .arch .foot{font-size:.73rem; color:var(--text-muted); margin:11px 0 0; line-height:1.5}
+
+  .total{padding:20px; border-radius:14px; background:linear-gradient(160deg,var(--surface-2),var(--surface-3)); border:1px solid var(--border); margin-bottom:16px}
+  .total .big{font-family:"IBM Plex Mono"; font-size:clamp(2.1rem,6vw,2.9rem); font-weight:600; letter-spacing:-.02em; line-height:1; color:var(--text); font-variant-numeric:tabular-nums}
+  .total .big small{font-size:1.05rem; color:var(--text-2); font-weight:500; margin-left:6px}
+  .total .cap{font-size:.8rem; color:var(--text-muted); margin-top:8px}
+
+  .bar{display:flex; height:26px; border-radius:7px; overflow:hidden; margin:14px 0 6px; background:var(--surface-3); border:1px solid var(--border)}
+  .bar span{display:block; height:100%}
+  .legend{display:flex; flex-wrap:wrap; gap:14px; margin-bottom:8px}
+  .legend div{display:flex; align-items:center; gap:7px; font-size:.8rem; color:var(--text-2)}
+  .dot{width:11px; height:11px; border-radius:3px; flex:none}
+
+  table{width:100%; border-collapse:collapse; font-size:.86rem}
+  .breakdown td{padding:7px 0; border-bottom:1px solid var(--border)}
+  .breakdown tr:last-child td{border-bottom:none; font-weight:600}
+  .breakdown td:last-child{text-align:right; font-family:"IBM Plex Mono"; font-variant-numeric:tabular-nums; color:var(--text)}
+  .breakdown .nm{display:flex; align-items:center; gap:8px; color:var(--text-2)}
+
+  .gpu-wrap{overflow-x:auto; margin-top:4px}
+  .gpu{width:100%; border-collapse:collapse; font-size:.83rem; min-width:420px}
+  .gpu th{text-align:left; font-family:"IBM Plex Sans Condensed"; text-transform:uppercase; letter-spacing:.06em; font-size:.7rem; color:var(--text-3); font-weight:600; padding:6px 10px; border-bottom:1px solid var(--border)}
+  .gpu th:last-child,.gpu td:last-child{text-align:right}
+  .gpu td{padding:8px 10px; border-bottom:1px solid var(--border); font-variant-numeric:tabular-nums}
+  .gpu td.name{font-weight:500}
+  .gpu .vram{font-family:"IBM Plex Mono"; color:var(--text-2)}
+  .gpu .tagline{font-size:.72rem; color:var(--text-3); font-weight:400}
+  .pill{display:inline-flex; align-items:center; gap:5px; font-size:.74rem; font-weight:600; padding:3px 9px; border-radius:20px; font-family:"IBM Plex Sans Condensed"; letter-spacing:.02em; white-space:nowrap}
+  .pill.ok{background:var(--ok-soft); color:var(--ok)}
+  .pill.warn{background:var(--warn-soft); color:var(--warn)}
+  .pill.over{background:var(--over-soft); color:var(--over)}
+
+  .actions{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:16px; padding-top:14px; border-top:1px solid var(--border)}
+  .act{
+    font-family:inherit; font-size:.8rem; font-weight:500; color:var(--text-2); background:var(--surface-2);
+    border:1px solid var(--border); border-radius:8px; padding:7px 12px; cursor:pointer;
+  }
+  .act:hover{border-color:var(--accent); color:var(--text)}
+  .act-msg{font-size:.76rem; color:var(--ok); font-weight:500}
+
+  .rec{margin-top:4px; display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:10px}
+  .rec .cell{background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:11px 13px}
+  .rec .k{font-size:.72rem; color:var(--text-muted); font-family:"IBM Plex Sans Condensed"; text-transform:uppercase; letter-spacing:.06em}
+  .rec .v{font-family:"IBM Plex Mono"; font-size:1.02rem; font-weight:600; color:var(--text); font-variant-numeric:tabular-nums; margin-top:3px}
+  .rec .v small{font-size:.72rem; color:var(--text-2); font-weight:400; margin-left:3px}
+  .rec .none{grid-column:1/-1; font-size:.8rem; color:var(--text-muted)}
+
+  .note{font-size:.78rem; color:var(--text-2); line-height:1.55; margin-top:18px; padding-top:16px; border-top:1px solid var(--border)}
+  .note code,footer code{font-family:"IBM Plex Mono"; background:var(--surface-2); padding:1px 5px; border-radius:4px; font-size:.9em; color:var(--text-2)}
+  footer{margin-top:30px; font-size:.76rem; color:var(--text-3); line-height:1.6; max-width:78ch; margin-inline:auto; text-align:center}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <span class="eyebrow">AI 部署容量規劃</span>
+      <h1>LLM 推論 VRAM 記憶體估算器</h1>
+      <p class="sub">輸入模型與工作負載條件,即時估算 GPU 記憶體需求,並比對加速卡落點。已計入 GQA/MLA 分片限制與統一記憶體的系統保留。</p>
+    </div>
+    <button class="theme-btn" id="themeBtn"><span id="themeIcon" aria-hidden="true">◐</span><span id="themeTxt">主題</span></button>
+  </header>
+
+  <div class="scenarios" id="scenarios">
+    <button class="scn" data-scn="rag" aria-pressed="false">
+      <span class="st"><span class="ic" aria-hidden="true">📚</span>企業 RAG / 知識問答</span>
+      <span class="sd">長上下文檢索、中並發。對應 AI-Q / Enterprise RAG 類 Blueprint。</span>
+    </button>
+    <button class="scn" data-scn="human" aria-pressed="false">
+      <span class="st"><span class="ic" aria-hidden="true">🗣️</span>數位人 / 客服對話</span>
+      <span class="sd">即時低延遲、較高並發、中等上下文。對應 Digital Human 類 Blueprint。</span>
+    </button>
+    <button class="scn" data-scn="doc" aria-pressed="false">
+      <span class="st"><span class="ic" aria-hidden="true">📄</span>長文件處理 / 摘要</span>
+      <span class="sd">超長上下文、低並發批次。對應 PDF-to-Podcast / 文件擷取類 Blueprint。</span>
+    </button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-h"><h2>輸入條件</h2></div>
+      <div class="card-b">
+        <div class="field">
+          <label for="model">LLM 模型 <span class="hint">(2025/08 gpt-oss 起的開源權重模型)</span></label>
+          <select id="model"></select>
+          <label style="display:flex;align-items:center;gap:7px;margin:8px 0 0;font-size:.78rem;cursor:pointer">
+            <input type="checkbox" id="showOld" style="width:auto;margin:0"> 顯示舊世代模型(對照用)
+          </label>
+        </div>
+
+        <div class="field">
+          <label id="wprecLbl">權重精度 / 量化格式 <span class="hint">(Data Format)</span></label>
+          <div class="seg" id="wprec" role="group" aria-labelledby="wprecLbl"></div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="ctx">上下文長度 <span class="hint">(tokens)</span></label>
+            <input type="number" id="ctx" min="128" max="10000000" step="512" value="8192">
+          </div>
+          <div class="field">
+            <label for="users">同時並發用戶 <span class="hint">(batch)</span></label>
+            <input type="number" id="users" min="1" max="10000" step="1" value="16">
+          </div>
+        </div>
+
+        <div class="field">
+          <label id="kvprecLbl">KV Cache 精度 <span class="hint">(可與權重不同)</span></label>
+          <div class="seg" id="kvprec" role="group" aria-labelledby="kvprecLbl"></div>
+        </div>
+
+        <div class="field">
+          <label for="frag">碎片化 / 保留餘裕 <span class="hint">(PagedAttention 區塊對齊、分配器碎片)</span> <span id="fragv" style="font-family:'IBM Plex Mono';color:var(--accent)">8%</span></label>
+          <input type="range" id="frag" min="0" max="25" step="1" value="8" style="width:100%">
+        </div>
+
+        <details class="arch">
+          <summary>模型架構參數(進階,可修改;預設為公開規格參考值)</summary>
+          <div class="row-3">
+            <div><label for="params">參數量 (B)</label><input type="number" id="params" min="0.1" max="10000" step="0.1" value="27.8"></div>
+            <div><label for="layers">總層數 L</label><input type="number" id="layers" min="1" max="500" step="1" value="64"></div>
+            <div><label for="hidden">hidden</label><input type="number" id="hidden" min="64" max="65536" step="1" value="5120"></div>
+          </div>
+          <div class="row-3">
+            <div><label for="lfull" title="KV 隨上下文線性成長的層">全注意力層</label><input type="number" id="lfull" min="0" max="500" step="1" value="16"></div>
+            <div><label for="lswa" title="KV 有上限的滑動視窗層">滑窗層</label><input type="number" id="lswa" min="0" max="500" step="1" value="0"></div>
+            <div><label for="win" title="滑動視窗大小 (tokens)">視窗大小</label><input type="number" id="win" min="0" max="131072" step="128" value="0"></div>
+          </div>
+          <div class="row-3">
+            <div><label for="kvheads">KV heads</label><input type="number" id="kvheads" min="0" max="256" step="1" value="4"></div>
+            <div><label for="headdim">head dim</label><input type="number" id="headdim" min="0" max="1024" step="1" value="256"></div>
+            <div><label for="latent" title="DeepSeek 類 MLA 壓縮 KV 維度;>0 時改用 MLA 公式">MLA latent</label><input type="number" id="latent" min="0" max="8192" step="1" value="0"></div>
+          </div>
+          <div class="row">
+            <div><label for="vocab">詞彙表 vocab</label><input type="number" id="vocab" min="1000" max="1000000" step="1" value="248320"></div>
+            <div><label for="chunk" title="prefill 分塊大小,決定啟動值峰值">prefill chunk</label><input type="number" id="chunk" min="128" max="65536" step="128" value="2048"></div>
+          </div>
+          <p class="foot">
+            <strong>總層數 ≠ 有 KV 的層數。</strong>線性注意力層(Mamba / DeltaNet)狀態固定,不計入 KV;滑窗層的 KV 上限為視窗大小。
+            MoE 權重以「總參數量」計(全部專家常駐);<code>MLA latent</code> &gt; 0 時走壓縮路徑(不 ×2)。<br>
+            目前:<span id="attnBadge" style="color:var(--accent);font-weight:600"></span>
+            <span id="qFlag" style="display:block;margin-top:5px;color:var(--warn)"></span>
+            <span id="archWarn" style="display:block;margin-top:5px;color:var(--over)"></span>
+          </p>
+        </details>
+
+        <div class="row" style="margin-top:15px">
+          <div class="field" style="margin:0">
+            <label for="rate">電價 <span class="hint">(每 kWh)</span></label>
+            <input type="number" id="rate" min="0" max="100" step="0.1" value="3.5">
+          </div>
+          <div class="field" style="margin:0">
+            <label for="util">平均負載率 <span class="hint">(%)</span></label>
+            <input type="number" id="util" min="1" max="100" step="1" value="70">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="act" id="copyCsv">複製 CSV</button>
+          <button type="button" class="act" id="copyCfg">複製設定碼</button>
+          <button type="button" class="act" id="loadCfg">載入設定碼</button>
+          <span class="act-msg" id="actMsg" role="status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>估算結果</h2><span id="perUser" style="font-size:.76rem;color:var(--text-muted);font-family:'IBM Plex Mono'"></span></div>
+      <div class="card-b">
+        <div class="total">
+          <div class="big" id="totalGB" aria-live="polite">—<small>GiB</small></div>
+          <div class="cap" id="totalCap">單卡所需總記憶體</div>
+        </div>
+
+        <div class="legend">
+          <div><span class="dot" style="background:var(--w-weight)"></span>模型權重</div>
+          <div><span class="dot" style="background:var(--w-kv)"></span>KV Cache</div>
+          <div><span class="dot" style="background:var(--w-act)"></span>啟動值</div>
+          <div><span class="dot" style="background:var(--w-oh)"></span>框架 + 餘裕</div>
+        </div>
+        <div class="bar" id="bar" aria-hidden="true"></div>
+
+        <table class="breakdown"><tbody id="bd"></tbody></table>
+
+        <div class="card-h" style="padding:22px 0 0"><h2>GPU 落點比對</h2></div>
+        <div class="gpu-wrap">
+          <table class="gpu">
+            <thead><tr><th>加速卡</th><th>VRAM</th><th>可用</th><th>張量並行</th><th>年電費</th><th>狀態</th></tr></thead>
+            <tbody id="gpu"></tbody>
+          </table>
+        </div>
+
+        <p class="note" id="note"></p>
+
+        <div class="card-h" style="padding:22px 0 0"><h2>推薦配置 · 營運估算</h2></div>
+        <div class="rec" id="rec"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <strong>計算模型</strong>:總量 = (權重 + KV Cache + 啟動值) ÷ 並行數 + 框架常駐,再乘上碎片化餘裕。<br>
+    權重 = 總參數量 × 每參數位元組(MoE 含全部專家;INT4/INT8/FP8 另計分組量化的 scales 開銷)。<br>
+    <strong>KV Cache 依層別分開計算</strong>:<code>2 × KVheads × headdim × 位元組 × (全注意力層 × 上下文 + 滑窗層 × min(上下文, 視窗)) × 並發</code>。
+    線性注意力層(Mamba / Gated DeltaNet / KDA)狀態固定不隨上下文成長,不計入。MLA 走壓縮路徑 <code>latent × …</code>(不 ×2)。
+    <strong>總層數 ≠ 有 KV 的層數</strong>——2026 的新模型多為混合架構,直接用總層數會高估數倍。<br>
+    <strong>張量並行(TP)</strong>取 2 的冪。GQA 的 KV 最多切到 <code>KV heads</code> 份;<strong>MLA 的 KV 在各卡複製、不隨 TP 遞減</strong>——這是 DeepSeek 類模型常被低估之處。<br>
+    數值以 GiB(2³⁰ bytes)計。統一記憶體機種(EdgeXpert/DGX Spark、Jetson Thor、RTX Spark)已扣除 OS/CPU 保留。實際佔用仍會因 vLLM / TensorRT-LLM 的分配策略而異,結果為工程估算而非保證值。模型架構為公開規格參考值,請以官方 config 為準。<br>
+    <strong>電費</strong>= TDP × 負載率 × 8760 小時 × 電價,僅計加速器本身,未含主機、散熱與 PUE。TDP 為典型板卡功耗參考值(統一記憶體機種為整機),實際依 SKU 與散熱設定而異。<br>
+    <strong>4-bit 區塊浮點</strong>:NVFP4 為每 16 個元素共用一個 FP8(E4M3)縮放因子(+12.5%),MXFP4 為每 32 個共用一個 E8M0 縮放因子(+6.25%),故兩者實際佔用不同於純 INT4。
+    劃掉的格式表示該模型目前無公開權重,不可選;NVFP4 另需 Blackwell 世代硬體才有原生加速。
+  </footer>
+</div>
+
+<script>
+/* 模型資料。關鍵:L=總層數,Lf=全注意力層數(KV 隨上下文成長),
+   Lsw=滑動視窗層數(KV 上限 win),其餘層為線性注意力(Mamba/DeltaNet,KV 可忽略)。
+   lat>0 表示 MLA 壓縮路徑,此時 Lf 為 MLA 層數。
+   grp: A=64GB 本地 / B=128GB / C=資料中心 / old=舊世代對照。
+   q 標記架構為估值(廠商未完整公開)。 */
+const MODELS = [
+  {id:"custom", name:"— 自訂 (Custom) —", grp:"A", p:27.8, L:64, Lf:16, Lsw:0, win:0, h:5120, kvh:4, hd:256, lat:0, v:248320, t:"自訂"},
+
+  // ---- A:64GB 本地 ----
+  {id:"gptoss-20b", name:"gpt-oss 20B", grp:"A", p:21, L:24, Lf:12, Lsw:12, win:128, h:2880, kvh:8, hd:64, lat:0, v:201088, t:"MoE · GQA + 帶狀稀疏 ｜ 3.6B active"},
+  {id:"qwen36-27b", name:"Qwen3.6 27B", grp:"A", p:27, L:64, Lf:16, Lsw:0, win:0, h:5120, kvh:4, hd:256, lat:0, v:248320, t:"Dense · 48×DeltaNet + 16×GQA"},
+  {id:"qwen38-27b", name:"Qwen3.8 27B", grp:"A", p:27.8, L:64, Lf:16, Lsw:0, win:0, h:5120, kvh:4, hd:256, lat:0, v:248320, t:"Dense · 48×DeltaNet + 16×GQA"},
+  {id:"qwen36-35b", name:"Qwen3.6 35B-A3B", grp:"A", p:35, L:40, Lf:10, Lsw:0, win:0, h:2048, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 30×DeltaNet + 10×GQA ｜ 3B active"},
+  {id:"nemotron35-light", name:"Nemotron 3.5 Lightning 30B-A3B", grp:"A", p:31.6, L:52, Lf:6, Lsw:0, win:0, h:2688, kvh:2, hd:128, lat:0, v:131072, t:"MoE · 24×Mamba-2 + 6×注意力 + 22×MoE ｜ 3.6B active"},
+  {id:"glimmer-30b", name:"Muse Glimmer 30B (Meta)", grp:"A", p:29.6, L:52, Lf:13, Lsw:39, win:2048, h:6656, kvh:2, hd:128, lat:0, v:202048, t:"Dense · 39×局部(w2048) + 13×全域"},
+  {id:"gemma4-26b", name:"Gemma 4 26B-A4B", grp:"A", p:26, L:30, Lf:4, Lsw:26, win:1024, h:2816, kvh:8, hd:256, lat:0, v:262144, t:"MoE · 26×滑窗(w1024) + 4×全域 ｜ 4B active"},
+  {id:"gemma4-31b", name:"Gemma 4 31B", grp:"A", p:31, L:60, Lf:10, Lsw:50, win:1024, h:5376, kvh:16, hd:256, lat:0, v:262144, t:"Dense · 50×滑窗(w1024) + 10×全域", q:"config 讀取全注意力層數為 8 或 10 不一致,取較保守的 10;全域層 global_head_dim 為 512,此處以 256 計"},
+
+  // ---- B:128GB ----
+  {id:"nemotron3-super", name:"Nemotron 3 Super 120B-A12B", grp:"B", p:120, L:88, Lf:22, Lsw:0, win:0, h:4096, kvh:2, hd:128, lat:0, v:131072, t:"MoE · 44×Mamba-2 + 22×注意力 + 22×MoE ｜ 12B active"},
+  {id:"gptoss-120b", name:"gpt-oss 120B", grp:"B", p:117, L:36, Lf:18, Lsw:18, win:128, h:2880, kvh:8, hd:64, lat:0, v:201088, t:"MoE · GQA + 帶狀稀疏 ｜ 5.1B active"},
+  {id:"deepseek-v4-flash", name:"DeepSeek V4 Flash 284B-A13B", grp:"B", p:284, L:43, Lf:43, Lsw:0, win:0, h:4096, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA + DSA ｜ 13B active", q:"config 無層型陣列,以全 43 層保守估;官方稱 DSA 稀疏注意力在 1M ctx 下可再降至約 V3.2 的 10%"},
+
+  // ---- C:資料中心 ----
+  {id:"minimax-m25", name:"MiniMax M2.5 230B-A10B", grp:"C", p:230, L:62, Lf:62, Lsw:0, win:0, h:3072, kvh:8, hd:128, lat:0, v:200064, t:"MoE · 純 GQA(全層全注意力) ｜ 10B active"},
+  {id:"qwen35-397b", name:"Qwen3.5 397B-A17B", grp:"C", p:397, L:60, Lf:15, Lsw:0, win:0, h:4096, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 45×DeltaNet + 15×GQA ｜ 17B active"},
+  {id:"glm52", name:"GLM-5.2 744B-A40B", grp:"C", p:744, L:78, Lf:78, Lsw:0, win:0, h:6144, kvh:0, hd:0, lat:576, v:154880, t:"MoE · MLA + DSA ｜ 40B active"},
+  {id:"kimi-k26", name:"Kimi K2.6 ~1T-A32B", grp:"C", p:1000, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:163840, t:"MoE · MLA(全層) ｜ 32B active"},
+  {id:"deepseek-v4-pro", name:"DeepSeek V4-Pro 1.6T-A49B", grp:"C", p:1600, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA + DSA ｜ 49B active", q:"config 無層型陣列,以全 61 層保守估"},
+  {id:"qwen38-max", name:"Qwen3.8-2.4T-A95B (Max)", grp:"C", p:2400, L:92, Lf:23, Lsw:0, win:0, h:8192, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 69×線性 + 23×全注意力 ｜ 95B active", q:"hidden 與 KV heads 未確認"},
+  {id:"kimi-k3", name:"Kimi K3 2.8T-A104B", grp:"C", p:2800, L:93, Lf:25, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:163840, t:"MoE · 69×KDA + 25×Gated MLA ｜ 104B active"},
+
+  // ---- 舊世代(預設隱藏,對照用) ----
+  {id:"qwen3-8b", name:"Qwen3 8B", grp:"old", p:8.2, L:36, Lf:36, Lsw:0, win:0, h:4096, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)"},
+  {id:"qwen3-14b", name:"Qwen3 14B", grp:"old", p:14.8, L:40, Lf:40, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)"},
+  {id:"qwen3-32b", name:"Qwen3 32B", grp:"old", p:32.8, L:64, Lf:64, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)"},
+  {id:"qwen3-30b-a3b", name:"Qwen3 30B-A3B", grp:"old", p:30.5, L:48, Lf:48, Lsw:0, win:0, h:2048, kvh:4, hd:128, lat:0, v:151936, t:"MoE · GQA ｜ 3B active"},
+  {id:"qwen3-235b", name:"Qwen3 235B-A22B", grp:"old", p:235, L:94, Lf:94, Lsw:0, win:0, h:4096, kvh:4, hd:128, lat:0, v:151936, t:"MoE · GQA ｜ 22B active"},
+  {id:"llama4-scout", name:"Llama 4 Scout 109B", grp:"old", p:109, L:48, Lf:48, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:202048, t:"MoE · GQA ｜ 17B active"},
+  {id:"llama4-mav", name:"Llama 4 Maverick 400B", grp:"old", p:400, L:48, Lf:48, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:202048, t:"MoE · GQA ｜ 17B active"},
+  {id:"glm46", name:"GLM-4.6 355B", grp:"old", p:355, L:92, Lf:92, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151552, t:"MoE · GQA ｜ 32B active"},
+  {id:"deepseek-v31", name:"DeepSeek-V3.1 671B", grp:"old", p:671, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA ｜ 37B active"},
+  {id:"deepseek-v32", name:"DeepSeek-V3.2 671B", grp:"old", p:671, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA ｜ 37B active"},
+];
+const GRP_LABEL = {A:"64GB 本地級", B:"128GB 級", C:"資料中心級", old:"舊世代(對照用)"};
+
+/* 4-bit 區塊浮點格式並非每個模型都有公開權重。僅列出有官方或社群 checkpoint 者;
+   其餘一律停用,避免給出不存在的配置。未列入 = 兩種 FP4 皆不可選。 */
+const FP4_SUPPORT = {
+  custom:              ["nvfp4", "mxfp4"],
+  "gptoss-20b":        ["mxfp4"],            // 原生 MXFP4 發布
+  "gptoss-120b":       ["mxfp4"],            // 原生 MXFP4 發布
+  "kimi-k3":           ["mxfp4"],
+  "qwen36-27b":        ["nvfp4"],
+  "qwen38-27b":        ["nvfp4"],
+  "gemma4-31b":        ["nvfp4"],
+  "nemotron35-light":  ["nvfp4"],            // NVIDIA 以 NVFP4 權重發布
+  "nemotron3-super":   ["nvfp4"],            // NVIDIA 提供 NVFP4 版本
+  "deepseek-v4-flash": ["nvfp4"],            // MoE 專家層為 FP4
+};
+const fp4Ok = (modelId, precId) => {
+  const pr = WPREC.find(x => x.id === precId);
+  if (!pr || !pr.fp4) return true;                        // 非 FP4 格式一律可選
+  return (FP4_SUPPORT[modelId] || []).includes(precId);
+};
+
+/* qoh = 分組縮放因子/零點的額外開銷比例。由大到小排列。
+   NVFP4:4-bit 元素 + 每 16 個共用一個 FP8(E4M3)scale → +8/16 bit = +12.5%
+   MXFP4:4-bit 元素 + 每 32 個共用一個 E8M0 scale     → +8/32 bit = +6.25%
+   INT4 :AWQ/GPTQ group=128,scales + zero-points      → 約 +6% */
+const WPREC = [
+  {id:"fp32", label:"FP32", b:4, qoh:0},
+  {id:"fp16", label:"FP16 / BF16", b:2, qoh:0},
+  {id:"fp8", label:"FP8", b:1, qoh:.02},
+  {id:"int8", label:"INT8", b:1, qoh:.03},
+  {id:"nvfp4", label:"NVFP4", b:.5, qoh:.125, fp4:1},
+  {id:"mxfp4", label:"MXFP4", b:.5, qoh:.0625, fp4:1},
+  {id:"int4", label:"INT4", b:.5, qoh:.06},
+];
+const KVPREC = [
+  {id:"fp16", label:"FP16", b:2},
+  {id:"fp8", label:"FP8", b:1},
+  {id:"int8", label:"INT8", b:1},
+];
+
+// res = OS/驅動保留 (GiB);maxN = 實務可並行的最大單元數;tdp = 典型功耗參考值 (W)
+const GPUS = [
+  {name:"RTX PRO 2000 Blackwell", vram:16, tag:"GDDR7", res:1, maxN:8, tdp:70},
+  {name:"RTX PRO 4000 Blackwell", vram:24, tag:"GDDR7", res:1, maxN:8, tdp:140},
+  {name:"RTX PRO 6000 Blackwell", vram:96, tag:"GDDR7", res:2, maxN:8, tdp:600},
+  {name:"RTX Spark (GB10)", vram:64, tag:"統一記憶體 · 最高 128GB", res:8, maxN:2, tdp:170},
+  {name:"Jetson AGX Thor", vram:128, tag:"統一記憶體", res:12, maxN:2, tdp:130},
+  {name:"EdgeXpert / DGX Spark", vram:128, tag:"統一記憶體 GB10", res:12, maxN:2, tdp:240},
+  {name:"H100", vram:80, tag:"HBM3", res:2, maxN:8, tdp:700},
+  {name:"H200", vram:141, tag:"HBM3e", res:3, maxN:8, tdp:700},
+  {name:"B200", vram:192, tag:"HBM3e", res:4, maxN:8, tdp:1000},
+];
+
+const SCN = {
+  rag:  {ctx:16384, users:16, frag:8},
+  human:{ctx:4096, users:48, frag:10},
+  doc:  {ctx:131072, users:4, frag:6},
+};
+
+const FRAMEWORK_GIB = 1.2;   // CUDA context + 框架常駐,每張卡都要
+const ACT_FACTOR = 8;        // prefill 期間層間工作緩衝倍率
+const GiB = 1024 ** 3;
+
+const state = {wprec:"fp16", kvprec:"fp16"};
+let lastSnapshot = null;
+const $ = id => document.getElementById(id);
+const fmt = n => n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
+const money = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : Math.round(n).toLocaleString();
+const num = (id, dflt) => {
+  const el = $(id), v = parseFloat(el.value);
+  if (!isFinite(v)) return dflt;
+  const min = parseFloat(el.min), max = parseFloat(el.max);
+  return Math.min(isFinite(max) ? max : Infinity, Math.max(isFinite(min) ? min : -Infinity, v));
+};
+
+const msel = $("model");
+function buildModelList(){
+  const keep = msel.value;
+  const showOld = $("showOld")?.checked;
+  msel.replaceChildren(new Option(MODELS[0].name, "custom"));
+  ["A", "B", "C", ...(showOld ? ["old"] : [])].forEach(g => {
+    const og = document.createElement("optgroup");
+    og.label = GRP_LABEL[g];
+    MODELS.filter(m => m.grp === g && m.id !== "custom")
+      .forEach(m => og.append(new Option(m.name, m.id)));
+    msel.append(og);
+  });
+  msel.value = [...msel.options].some(o => o.value === keep) ? keep : "qwen38-27b";
+}
+$("showOld").onchange = () => { buildModelList(); applyModel(msel.value); calc(); };
+buildModelList();
+msel.value = "qwen38-27b";
+
+function buildSeg(el, items, key){
+  el.replaceChildren(...items.map(it => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = it.label;
+    if (key === "wprec" && !fp4Ok(msel.value, it.id)){
+      b.disabled = true;
+      b.title = `此模型無公開的 ${it.label} 權重`;
+    }
+    b.setAttribute("aria-pressed", String(state[key] === it.id));
+    b.onclick = () => {
+      state[key] = it.id;
+      [...el.children].forEach(c => c.setAttribute("aria-pressed", String(c === b)));
+      calc();
+    };
+    return b;
+  }));
+}
+// 切換模型後,若目前選的精度該模型不支援,退回 FP8
+function normalizeWprec(){
+  if (!fp4Ok(msel.value, state.wprec)) state.wprec = "fp8";
+  buildSeg($("wprec"), WPREC, "wprec");
+}
+buildSeg($("wprec"), WPREC, "wprec");
+buildSeg($("kvprec"), KVPREC, "kvprec");
+
+function applyModel(id){
+  const m = MODELS.find(x => x.id === id);
+  if (!m) return;
+  if (id !== "custom"){
+    $("params").value = m.p; $("layers").value = m.L; $("hidden").value = m.h;
+    $("lfull").value = m.Lf; $("lswa").value = m.Lsw; $("win").value = m.win;
+    $("kvheads").value = m.kvh; $("headdim").value = m.hd;
+    $("latent").value = m.lat; $("vocab").value = m.v;
+  }
+  $("attnBadge").textContent = m.t;
+  $("qFlag").textContent = m.q ? "⚠ 未確認:" + m.q : "";
+  normalizeWprec();
+}
+msel.onchange = () => { applyModel(msel.value); calc(); };
+applyModel("qwen38-27b");
+
+document.querySelectorAll(".scn").forEach(c => {
+  c.onclick = () => {
+    const s = SCN[c.dataset.scn];
+    $("ctx").value = s.ctx; $("users").value = s.users; $("frag").value = s.frag;
+    document.querySelectorAll(".scn").forEach(o => o.setAttribute("aria-pressed", String(o === c)));
+    calc();
+  };
+});
+
+const ARCH_IDS = ["params","layers","hidden","lfull","lswa","win","kvheads","headdim","latent","vocab","chunk"];
+[...ARCH_IDS, "ctx", "users"].forEach(id => {
+  $(id).addEventListener("input", () => {
+    if (ARCH_IDS.includes(id)){
+      msel.value = "custom";
+      $("attnBadge").textContent = "自訂";
+      $("qFlag").textContent = "";
+      normalizeWprec(); // custom 對 FP4 的支援與前一個模型不同,按鈕須重新渲染
+    }
+    calc();
+  });
+});
+$("frag").addEventListener("input", calc);
+["rate", "util"].forEach(id => $(id).addEventListener("input", calc));
+
+function calc(){
+  const p = num("params",1), L = num("layers",1), h = num("hidden",4096);
+  const Lf = num("lfull",0), Lsw = num("lswa",0), win = num("win",0);
+  const kvh = num("kvheads",0), hd = num("headdim",0), lat = num("latent",0), vocab = num("vocab",150000);
+  const chunk = num("chunk",2048), ctx = num("ctx",8192), users = num("users",1);
+  const fragPct = num("frag",8);
+  const wp = WPREC.find(x => x.id === state.wprec);
+  const kb = KVPREC.find(x => x.id === state.kvprec).b;
+  $("fragv").textContent = fragPct + "%";
+
+  // 權重:總參數量 × 位元組,量化格式另計 scales/zero-points
+  const weightsB = p * 1e9 * wp.b * (1 + wp.qoh);
+
+  // KV Cache。全注意力層隨 ctx 成長;滑窗層上限為 win;線性層(L - Lf - Lsw)不計。
+  const isMLA = lat > 0;
+  const swTok = win > 0 ? Math.min(ctx, win) : 0;
+  const perLayerTokB = isMLA ? lat * kb : 2 * kvh * hd * kb;
+  const kvB = perLayerTokB * (Lf * ctx + Lsw * swTok) * users;
+  const kvPerTokB = perLayerTokB * (Lf + Lsw); // 顯示用的等效每 token 量
+  const linearL = Math.max(L - Lf - Lsw, 0);
+
+  // 邊界防呆:兩個容易手誤又不會讓公式報錯、但結果會失真的輸入組合
+  const warnings = [];
+  if (Lf + Lsw > L) warnings.push(`全注意力層 + 滑窗層(${Lf + Lsw})超過總層數 L(${L}),層數設定互相矛盾`);
+  if (Lsw > 0 && win <= 0) warnings.push(`已設定 ${Lsw} 個滑窗層,但視窗大小為 0 → 這些層的 KV 會被當成 0,可能不是你要的結果`);
+  $("archWarn").textContent = warnings.length ? "⚠ " + warnings.join("；") : "";
+
+  // 啟動值:prefill 分塊的層間工作緩衝 + logits 緩衝(不隨層數累加,逐層重用)
+  const actB = chunk * h * 2 * ACT_FACTOR + users * vocab * 4;
+
+  const fwB = FRAMEWORK_GIB * GiB;
+  const frag = 1 + fragPct / 100;
+
+  // 單卡(TP=1)總量
+  const perGPU = N => {
+    const kvShard = isMLA ? 1 : Math.min(N, Math.max(kvh, 1)); // MLA 在 TP 下各卡複製
+    return (weightsB / N + kvB / kvShard + actB / N + fwB) * frag;
+  };
+
+  // 各列為未加餘裕的實量,餘裕全部歸入「框架 + 餘裕」列,確保加總 == 合計
+  const baseB = weightsB + kvB + actB + fwB;
+  const wG = weightsB / GiB, kvG = kvB / GiB, aG = actB / GiB;
+  const oG = (fwB + baseB * (frag - 1)) / GiB;
+  const tG = perGPU(1) / GiB;
+
+  $("totalGB").innerHTML = fmt(tG) + "<small>GiB</small>";
+  $("totalCap").textContent = `單卡(TP=1)所需總記憶體 · ${isMLA ? "MLA" : "GQA/MHA"} 路徑`
+    + ` · KV 層 ${Lf} 全注意力`
+    + (Lsw ? ` + ${Lsw} 滑窗` : "")
+    + (linearL ? ` + ${linearL} 線性層不計` : "");
+  $("perUser").textContent = "每用戶 KV ≈ " + fmt(kvB / users / GiB) + " GiB";
+
+  const segs = [["--w-weight", wG], ["--w-kv", kvG], ["--w-act", aG], ["--w-oh", oG]];
+  $("bar").replaceChildren(...segs.map(([c, v]) => {
+    const s = document.createElement("span");
+    s.style.width = (tG > 0 ? v / tG * 100 : 0) + "%";
+    s.style.background = `var(${c})`;
+    return s;
+  }));
+
+  const row = (color, name, sub, val) =>
+    `<tr><td class="nm"><span class="dot" style="background:var(${color})"></span>${name}${sub ? ` <span style="color:var(--text-3);font-size:.85em">${sub}</span>` : ""}</td><td>${fmt(val)} GiB</td></tr>`;
+  $("bd").innerHTML =
+    row("--w-weight", "模型權重", wp.qoh ? `(含 ${Math.round(wp.qoh*100)}% 量化開銷)` : "", wG) +
+    row("--w-kv", "KV Cache", `(${users} 並發 × ${ctx.toLocaleString()} ctx${Lsw && swTok < ctx ? ` · 滑窗封頂 ${swTok.toLocaleString()}` : ""})`, kvG) +
+    row("--w-act", "啟動值", `(chunk ${chunk.toLocaleString()})`, aG) +
+    row("--w-oh", "框架常駐 + 餘裕", `(${fragPct}% 碎片化)`, oG) +
+    `<tr><td class="nm">合計</td><td>${fmt(tG)} GiB</td></tr>`;
+
+  // GPU 落點:TP 取 2 的冪
+  const rate = num("rate", 3.5), util = num("util", 70) / 100;
+  const yearlyCost = g => g.tdp * util * 8760 / 1000 * rate; // W → kWh/年 → 電費
+
+  const fits = [];
+  $("gpu").innerHTML = GPUS.map(g => {
+    const usable = g.vram - g.res;
+    let n = 0;
+    for (let N = 1; N <= g.maxN; N *= 2){
+      if (perGPU(N) / GiB <= usable){ n = N; break; }
+    }
+    if (n) fits.push({g, n, usable});
+    const cls = !n ? "over" : n === 1 ? "ok" : "warn";
+    const txt = !n ? `超出 ${g.maxN}× 上限` : n === 1 ? "單卡可容" : `${n}× 並行`;
+    return `<tr><td class="name">${g.name}<br><span class="tagline">${g.tag} · ${g.tdp}W</span></td>`
+      + `<td class="vram">${g.vram} GB</td><td class="vram">${usable} GiB</td>`
+      + `<td>${n ? n + "×" : "—"}</td>`
+      + `<td class="vram">${n ? money(yearlyCost(g) * n) : "—"}</td>`
+      + `<td><span class="pill ${cls}">${txt}</span></td></tr>`;
+  }).join("");
+
+  const single = fits.filter(f => f.n === 1).sort((a, b) => a.g.vram - b.g.vram)[0];
+  // 推薦以「卡數少」優先,同卡數再取總 VRAM 較小者
+  const multi = [...fits].sort((a, b) => a.n - b.n || a.n * a.g.vram - b.n * b.g.vram)[0];
+  const tip = isMLA
+    ? "此模型走 MLA,KV Cache 在張量並行下<strong>各卡複製而不遞減</strong>,加卡只攤薄權重。要壓 KV 請降並發或上下文。"
+    : kvG > wG * .5
+      ? `KV Cache 佔比偏高(${Math.round(kvG/tG*100)}%),改用 <code>FP8</code> KV 可省近半。`
+      : "權重為主要開銷,降低權重精度(FP8 / INT4)最有效。";
+  $("note").innerHTML = (single
+    ? `最小可單卡容納者為 <strong>${single.g.name}</strong>(可用 ${single.usable} GiB)。`
+    : multi
+      ? `無單卡方案;最小可行為 <strong>${multi.n}× ${multi.g.name}</strong>。`
+      : "清單中無任何配置可容納,請降低精度、並發或上下文。") + " " + tip;
+
+  // 推薦配置的營運估算
+  const best = single || multi;
+  if (best){
+    const watt = best.g.tdp * best.n, kwh = watt * util * 8760 / 1000;
+    const headroom = best.usable - perGPU(best.n) / GiB;
+    const cell = (k, v, u) => `<div class="cell"><div class="k">${k}</div><div class="v">${v}${u ? `<small>${u}</small>` : ""}</div></div>`;
+    $("rec").innerHTML =
+      cell("配置", `${best.n}×`, best.g.name.split(" ")[0] === "EdgeXpert" ? "EdgeXpert" : best.g.name.replace(/ Blackwell| \(GB10\)/, "")) +
+      cell("每卡佔用", fmt(perGPU(best.n) / GiB), "GiB") +
+      cell("餘裕", fmt(Math.max(headroom, 0)), "GiB") +
+      cell("尖峰功耗", watt.toLocaleString(), "W") +
+      cell("年耗電", Math.round(kwh).toLocaleString(), "kWh") +
+      cell("年電費", money(kwh * rate), "");
+  } else {
+    $("rec").innerHTML = `<p class="none">尚無可行配置,故不估算功耗與電費。</p>`;
+  }
+
+  lastSnapshot = {
+    model: msel.selectedOptions[0].textContent, wprec: wp.label,
+    kvprec: KVPREC.find(x => x.id === state.kvprec).label,
+    ctx, users, rows: [["模型權重", wG], ["KV Cache", kvG], ["啟動值", aG], ["框架常駐+餘裕", oG], ["合計", tG]],
+    gpus: GPUS.map(g => {
+      const f = fits.find(x => x.g === g);
+      return [g.name, g.vram, g.vram - g.res, f ? f.n : 0, f ? Math.round(yearlyCost(g) * f.n) : 0];
+    })
+  };
+}
+
+/* ---------- 匯出與分享 ---------- */
+// 沙箱會封鎖頁面自發的下載,故一律走剪貼簿;clipboard API 不可用時退回 execCommand
+async function copyText(text, okMsg){
+  try{
+    await navigator.clipboard.writeText(text);
+  }catch{
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    if (!ok) return flash("複製失敗,請手動選取", true);
+  }
+  flash(okMsg);
+}
+let flashTimer;
+function flash(msg, isErr){
+  const el = $("actMsg");
+  el.textContent = msg;
+  el.style.color = isErr ? "var(--over)" : "var(--ok)";
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { el.textContent = ""; }, 2600);
+}
+
+const CFG_IDS = ["ctx","users","frag","params","layers","hidden","lfull","lswa","win","kvheads","headdim","latent","vocab","chunk","rate","util"];
+const cfgEncode = () => {
+  const o = {m: msel.value, w: state.wprec, k: state.kvprec};
+  CFG_IDS.forEach(id => o[id] = $(id).value);
+  return btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+};
+function cfgApply(code){
+  let o;
+  try{ o = JSON.parse(decodeURIComponent(escape(atob(code.trim())))); }
+  catch{ return flash("設定碼無法解析", true); }
+  if (o.m && MODELS.some(m => m.id === o.m)){
+    const tgt = MODELS.find(m => m.id === o.m);
+    if (tgt.grp === "old" && !$("showOld").checked){ $("showOld").checked = true; buildModelList(); }
+    msel.value = o.m; applyModel(o.m);
+  }
+  if (WPREC.some(x => x.id === o.w) && fp4Ok(msel.value, o.w)) state.wprec = o.w;
+  if (KVPREC.some(x => x.id === o.k)) state.kvprec = o.k;
+  normalizeWprec();
+  buildSeg($("kvprec"), KVPREC, "kvprec");
+  CFG_IDS.forEach(id => { if (o[id] !== undefined) $(id).value = o[id]; });
+  if (o.m === "custom") $("attnBadge").textContent = "自訂";
+  calc();
+  flash("設定已載入");
+}
+
+$("copyCsv").onclick = () => {
+  const s = lastSnapshot;
+  if (!s) return;
+  const esc = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
+  const lines = [
+    ["項目", "值"], ["模型", s.model], ["權重精度", s.wprec], ["KV 精度", s.kvprec],
+    ["上下文", s.ctx], ["並發", s.users], [],
+    ["記憶體項目", "GiB"], ...s.rows.map(r => [r[0], fmt(r[1])]), [],
+    ["加速卡", "VRAM(GB)", "可用(GiB)", "張量並行", "年電費"],
+    ...s.gpus.map(g => [g[0], g[1], g[2], g[3] ? g[3] + "x" : "不可行", g[4] || ""]),
+  ];
+  copyText("﻿" + lines.map(l => l.map(esc).join(",")).join("\n"), "CSV 已複製到剪貼簿");
+};
+$("copyCfg").onclick = () => copyText(cfgEncode(), "設定碼已複製");
+$("loadCfg").onclick = () => {
+  const box = document.createElement("input");
+  box.type = "text";
+  box.placeholder = "貼上設定碼後按 Enter";
+  box.style.cssText = "flex:1 1 180px;font-size:.8rem;padding:6px 10px";
+  box.onkeydown = e => {
+    if (e.key === "Enter"){ cfgApply(box.value); box.remove(); }
+    if (e.key === "Escape") box.remove();
+  };
+  box.onblur = () => box.remove();
+  $("actMsg").before(box);
+  box.focus();
+};
+
+const setTheme = dark => {
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  $("themeIcon").textContent = dark ? "☾" : "☀";
+  $("themeTxt").textContent = dark ? "深色" : "淺色";
+  $("themeBtn").setAttribute("aria-label", `切換至${dark ? "淺色" : "深色"}主題`);
+};
+$("themeBtn").onclick = () => setTheme(
+  !(document.documentElement.getAttribute("data-theme") === "dark")
+);
+setTheme(matchMedia("(prefers-color-scheme:dark)").matches);
+
+calc();
+// 獨立網址使用時,#cfg=... 可直接還原情境(Artifact 內請改用「載入設定碼」)
+if (location.hash.startsWith("#cfg=")) cfgApply(location.hash.slice(5));
+</script>
