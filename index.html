@@ -11,6 +11,7 @@
     --accent:#0891a8; --accent-soft:#d6eef2;
     --ok:#15803d; --ok-soft:#d6efdd; --warn:#b45309; --warn-soft:#f6e6c8; --over:#c02626; --over-soft:#f6d9d9;
     --w-weight:#0891a8; --w-kv:#c77d0a; --w-act:#8a6fb0; --w-oh:#7d8d99;
+    --mem-gddr:hsl(215 72% 40%); --mem-unified:hsl(255 58% 46%); --mem-hbm:hsl(340 68% 40%);
     --on-accent:#ffffff;
     --shadow:0 1px 2px rgba(20,33,43,.06),0 8px 24px -12px rgba(20,33,43,.18);
   }
@@ -22,6 +23,7 @@
       --accent:#2bbdd4; --accent-soft:#123039;
       --ok:#4ade80; --ok-soft:#12301d; --warn:#fbbf24; --warn-soft:#3a2c0e; --over:#f87171; --over-soft:#3a1616;
       --w-weight:#2bbdd4; --w-kv:#eab35a; --w-act:#b49fd8; --w-oh:#8497a3;
+      --mem-gddr:hsl(215 80% 70%); --mem-unified:hsl(255 75% 76%); --mem-hbm:hsl(340 80% 72%);
       --on-accent:#04222a;
       --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -14px rgba(0,0,0,.6);
     }
@@ -33,6 +35,7 @@
     --accent:#2bbdd4; --accent-soft:#123039;
     --ok:#4ade80; --ok-soft:#12301d; --warn:#fbbf24; --warn-soft:#3a2c0e; --over:#f87171; --over-soft:#3a1616;
     --w-weight:#2bbdd4; --w-kv:#eab35a; --w-act:#b49fd8; --w-oh:#8497a3;
+    --mem-gddr:hsl(215 80% 70%); --mem-unified:hsl(255 75% 76%); --mem-hbm:hsl(340 80% 72%);
     --on-accent:#04222a;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -14px rgba(0,0,0,.6);
   }
@@ -131,6 +134,9 @@
   .gpu th:last-child,.gpu td:last-child{text-align:right}
   .gpu td{padding:8px 10px; border-bottom:1px solid var(--border); font-variant-numeric:tabular-nums}
   .gpu td.name{font-weight:500}
+  .gpu td.name.mem-gddr{color:var(--mem-gddr)}
+  .gpu td.name.mem-unified{color:var(--mem-unified)}
+  .gpu td.name.mem-hbm{color:var(--mem-hbm)}
   .gpu .vram{font-family:"IBM Plex Mono"; color:var(--text-2)}
   .gpu .tagline{font-size:.72rem; color:var(--text-3); font-weight:400}
   .pill{display:inline-flex; align-items:center; gap:5px; font-size:.74rem; font-weight:600; padding:3px 9px; border-radius:20px; font-family:"IBM Plex Sans Condensed"; letter-spacing:.02em; white-space:nowrap}
@@ -290,6 +296,11 @@
         <table class="breakdown"><tbody id="bd"></tbody></table>
 
         <div class="card-h" style="padding:22px 0 0"><h2>GPU 落點比對</h2></div>
+        <div class="legend" style="margin:6px 0 2px">
+          <div><span class="dot" style="background:var(--mem-gddr)"></span>GDDR</div>
+          <div><span class="dot" style="background:var(--mem-unified)"></span>統一記憶體</div>
+          <div><span class="dot" style="background:var(--mem-hbm)"></span>HBM</div>
+        </div>
         <div class="gpu-wrap">
           <table class="gpu">
             <thead><tr><th>加速卡</th><th>VRAM</th><th>可用</th><th>張量並行</th><th>年電費</th><th>狀態</th></tr></thead>
@@ -312,7 +323,7 @@
     線性注意力層(Mamba / Gated DeltaNet / KDA)狀態固定不隨上下文成長,不計入。MLA 走壓縮路徑 <code>latent × …</code>(不 ×2)。
     <strong>總層數 ≠ 有 KV 的層數</strong>——2026 的新模型多為混合架構,直接用總層數會高估數倍。<br>
     <strong>張量並行(TP)</strong>取 2 的冪。GQA 的 KV 最多切到 <code>KV heads</code> 份;<strong>MLA 的 KV 在各卡複製、不隨 TP 遞減</strong>——這是 DeepSeek 類模型常被低估之處。<br>
-    數值以 GiB(2³⁰ bytes)計。統一記憶體機種(EdgeXpert/DGX Spark、Jetson Thor、RTX Spark)已扣除 OS/CPU 保留。實際佔用仍會因 vLLM / TensorRT-LLM 的分配策略而異,結果為工程估算而非保證值。模型架構為公開規格參考值,請以官方 config 為準。<br>
+    數值以 GiB(2³⁰ bytes)計。統一記憶體機種(EdgeXpert/DGX Spark (GB10)、Jetson Thor、RTX Spark (N1x))已扣除 OS/CPU 保留。實際佔用仍會因 vLLM / TensorRT-LLM 的分配策略而異,結果為工程估算而非保證值。模型架構為公開規格參考值,請以官方 config 為準。<br>
     <strong>電費</strong>= TDP × 負載率 × 8760 小時 × 電價,僅計加速器本身,未含主機、散熱與 PUE。TDP 為典型板卡功耗參考值(統一記憶體機種為整機),實際依 SKU 與散熱設定而異。<br>
     <strong>4-bit 區塊浮點</strong>:NVFP4 為每 16 個元素共用一個 FP8(E4M3)縮放因子(+12.5%),MXFP4 為每 32 個共用一個 E8M0 縮放因子(+6.25%),故兩者實際佔用不同於純 INT4。
     劃掉的格式表示該模型目前無公開權重,不可選;NVFP4 另需 Blackwell 世代硬體才有原生加速。
@@ -405,17 +416,18 @@ const KVPREC = [
   {id:"int8", label:"INT8", b:1},
 ];
 
-// res = OS/驅動保留 (GiB);maxN = 實務可並行的最大單元數;tdp = 典型功耗參考值 (W)
+// res = OS/驅動保留 (GiB);maxN = 實務可並行的最大單元數;tdp = 典型功耗參考值 (W,用於電費估算,不在表格顯示)
+// mem = 記憶體類型,決定名稱顏色:gddr(獨立顯卡)/ unified(統一記憶體)/ hbm(資料中心)
 const GPUS = [
-  {name:"RTX PRO 2000 Blackwell", vram:16, tag:"GDDR7", res:1, maxN:8, tdp:70},
-  {name:"RTX PRO 4000 Blackwell", vram:24, tag:"GDDR7", res:1, maxN:8, tdp:140},
-  {name:"RTX PRO 6000 Blackwell", vram:96, tag:"GDDR7", res:2, maxN:8, tdp:600},
-  {name:"RTX Spark (GB10)", vram:64, tag:"統一記憶體 · 最高 128GB", res:8, maxN:2, tdp:170},
-  {name:"Jetson AGX Thor", vram:128, tag:"統一記憶體", res:12, maxN:2, tdp:130},
-  {name:"EdgeXpert / DGX Spark", vram:128, tag:"統一記憶體 GB10", res:12, maxN:2, tdp:240},
-  {name:"H100", vram:80, tag:"HBM3", res:2, maxN:8, tdp:700},
-  {name:"H200", vram:141, tag:"HBM3e", res:3, maxN:8, tdp:700},
-  {name:"B200", vram:192, tag:"HBM3e", res:4, maxN:8, tdp:1000},
+  {name:"RTX PRO 2000 Blackwell", vram:16, tag:"GDDR7", res:1, maxN:8, tdp:70, mem:"gddr"},
+  {name:"RTX PRO 4000 Blackwell", vram:24, tag:"GDDR7", res:1, maxN:8, tdp:140, mem:"gddr"},
+  {name:"RTX PRO 6000 Blackwell", vram:96, tag:"GDDR7", res:2, maxN:8, tdp:600, mem:"gddr"},
+  {name:"RTX Spark (N1x)", vram:64, tag:"統一記憶體 · 最高 128GB", res:8, maxN:2, tdp:170, mem:"unified"},
+  {name:"Jetson AGX Thor", vram:128, tag:"統一記憶體", res:12, maxN:2, tdp:130, mem:"unified"},
+  {name:"EdgeXpert / DGX Spark (GB10)", vram:128, tag:"統一記憶體", res:12, maxN:2, tdp:240, mem:"unified"},
+  {name:"H100", vram:80, tag:"HBM3", res:2, maxN:8, tdp:700, mem:"hbm"},
+  {name:"H200", vram:141, tag:"HBM3e", res:3, maxN:8, tdp:700, mem:"hbm"},
+  {name:"B200", vram:192, tag:"HBM3e", res:4, maxN:8, tdp:1000, mem:"hbm"},
 ];
 
 const SCN = {
@@ -607,7 +619,7 @@ function calc(){
     if (n) fits.push({g, n, usable});
     const cls = !n ? "over" : n === 1 ? "ok" : "warn";
     const txt = !n ? `超出 ${g.maxN}× 上限` : n === 1 ? "單卡可容" : `${n}× 並行`;
-    return `<tr><td class="name">${g.name}<br><span class="tagline">${g.tag} · ${g.tdp}W</span></td>`
+    return `<tr><td class="name mem-${g.mem}">${g.name}<br><span class="tagline">${g.tag}</span></td>`
       + `<td class="vram">${g.vram} GB</td><td class="vram">${usable} GiB</td>`
       + `<td>${n ? n + "×" : "—"}</td>`
       + `<td class="vram">${n ? money(yearlyCost(g) * n) : "—"}</td>`
