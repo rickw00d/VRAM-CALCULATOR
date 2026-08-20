@@ -86,6 +86,38 @@
   .field:last-child{margin-bottom:0}
   label{display:block; font-size:.82rem; font-weight:500; color:var(--text-2); margin-bottom:6px}
   label .hint{color:var(--text-3); font-weight:400}
+
+  /* 欄位標籤 + 說明按鈕 + 數值同一行;label 內部不再自帶下邊距,交給外層 .lbl-row */
+  .lbl-row{position:relative; display:flex; align-items:baseline; gap:6px; margin-bottom:6px}
+  .lbl-row label{margin-bottom:0; flex:0 1 auto}
+  .lbl-row #fragv{margin-left:auto}
+  .tipbtn{
+    width:16px; height:16px; flex:none; padding:0; border-radius:50%; border:1px solid var(--border-strong);
+    background:var(--surface-2); color:var(--text-3); font:600 .68rem/1 "IBM Plex Mono",monospace;
+    cursor:help; display:inline-flex; align-items:center; justify-content:center;
+  }
+  .tipbtn:hover,.tipbtn:focus-visible{border-color:var(--accent); color:var(--accent)}
+  /* 滑鼠移到按鈕「或」提示框本身都要保持開啟,否則游標移過去的路上會先關掉 */
+  .tip{
+    display:none; position:absolute; z-index:20; left:0; top:calc(100% + 8px);
+    width:min(420px,88vw); padding:14px 16px; border-radius:12px;
+    background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow);
+    font-size:.76rem; color:var(--text-2); line-height:1.5;
+  }
+  /* ~ 而非 +:DOM 上 .tipbtn 與 .tip 中間隔著 #fragv,不是緊鄰的下一個手足,
+     用 + 這個選擇器永遠不會命中(踩過一次的坑) */
+  .tipbtn:hover ~ .tip, .tipbtn:focus-visible ~ .tip, .tip:hover{display:block}
+  .tip-h{display:block; font-size:.72rem; color:var(--text); margin-bottom:8px}
+  .tip-h2{margin-top:12px}
+  .tip-scroll{overflow-x:auto}
+  .tip table{width:100%; border-collapse:collapse; font-size:.73rem; white-space:normal}
+  .tip th,.tip td{text-align:left; padding:5px 8px 5px 0; vertical-align:top; border-bottom:1px solid var(--border)}
+  .tip thead th{color:var(--text-3); font-weight:500; white-space:nowrap}
+  .tip tbody tr:last-child td{border-bottom:none}
+  .tip ul{margin:6px 0 0; padding-left:1.1em}
+  .tip li{margin-bottom:4px}
+  .tip li:last-child{margin-bottom:0}
+  @media (max-width:520px){ .tip{left:50%; transform:translateX(-50%); width:92vw} }
   select,input[type=number]{
     width:100%; font-family:"IBM Plex Mono",monospace; font-size:.9rem; color:var(--text);
     background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:9px 11px;
@@ -226,7 +258,30 @@
         </div>
 
         <div class="field">
-          <label for="frag">碎片化 / 保留餘裕 <span class="hint">(PagedAttention 區塊對齊、分配器碎片)</span> <span id="fragv" style="font-family:'IBM Plex Mono';color:var(--accent)">8%</span></label>
+          <div class="lbl-row">
+            <label for="frag">碎片化 / 保留餘裕 <span class="hint">(PagedAttention 區塊對齊、分配器碎片)</span></label>
+            <button type="button" class="tipbtn" aria-label="碎片化餘裕怎麼設?顯示說明" aria-describedby="fragTip">i</button>
+            <span id="fragv" style="font-family:'IBM Plex Mono';color:var(--accent)">8%</span>
+            <div class="tip" id="fragTip" role="tooltip">
+              <strong class="tip-h">三個範本為什麼給不同的餘裕</strong>
+              <div class="tip-scroll">
+                <table>
+                  <thead><tr><th>範本</th><th>並發</th><th>上下文</th><th>餘裕</th><th>為什麼</th></tr></thead>
+                  <tbody>
+                    <tr><td>數位人／客服</td><td>48</td><td>4K</td><td><b>10%</b></td><td>序列多又短,每條都付一次區塊尾巴的代價,浪費佔比最高</td></tr>
+                    <tr><td>企業 RAG</td><td>16</td><td>16K</td><td><b>8%</b></td><td>中間值</td></tr>
+                    <tr><td>長文件處理</td><td>4</td><td>128K</td><td><b>6%</b></td><td>序列少又長,尾巴浪費被超長序列攤平,佔比最低</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <strong class="tip-h tip-h2">自己調的話</strong>
+              <ul>
+                <li><b>0%</b> —— 理論下限,只在你想知道「絕對最少要多少」時用,別拿來做採購決策</li>
+                <li><b>8%</b> —— 一般 vLLM 穩態</li>
+                <li><b>15–25%</b> —— 長時間運行的服務、負載變異大、頻繁換 LoRA</li>
+              </ul>
+            </div>
+          </div>
           <input type="range" id="frag" min="0" max="25" step="1" value="8" style="width:100%">
         </div>
 
