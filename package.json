@@ -1,0 +1,12 @@
+{
+  "name": "llm-vram-calculator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LLM 推論 VRAM 記憶體估算器 — 單檔靜態頁面,package.json 僅供迴歸測試使用",
+  "scripts": {
+    "test": "node test/ctx-test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}

@@ -1,0 +1,6 @@
+# 個人編輯器偏好,不屬於專案
+.vscode/
+
+# 測試用的 jsdom 依賴
+node_modules/
+package-lock.json
