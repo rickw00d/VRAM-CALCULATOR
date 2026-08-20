@@ -92,8 +92,9 @@
   }
   select{font-family:"IBM Plex Sans"}
   input:focus,select:focus{border-color:var(--accent)}
-  .row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
-  .row-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+  /* minmax(0,1fr) 而非 1fr:select 的長選項文字會把 auto 下限撐開,擠破手機版版面 */
+  .row{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px}
+  .row-3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px}
 
   .seg{display:flex; flex-wrap:wrap; gap:4px; background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:3px}
   .seg button{
@@ -209,7 +210,9 @@
         <div class="row">
           <div class="field">
             <label for="ctx">上下文長度 <span class="hint">(tokens)</span></label>
-            <input type="number" id="ctx" min="128" max="10000000" step="512" value="8192">
+            <select id="ctx"></select>
+            <input type="number" id="ctxCustom" min="128" max="10000000" step="512" value="8192"
+                   hidden aria-label="自訂上下文長度 (tokens)" style="margin-top:8px">
           </div>
           <div class="field">
             <label for="users">同時並發用戶 <span class="hint">(batch)</span></label>
@@ -252,6 +255,7 @@
             <strong>總層數 ≠ 有 KV 的層數。</strong>線性注意力層(Mamba / DeltaNet)狀態固定,不計入 KV;滑窗層的 KV 上限為視窗大小。
             MoE 權重以「總參數量」計(全部專家常駐);<code>MLA latent</code> &gt; 0 時走壓縮路徑(不 ×2)。<br>
             目前:<span id="attnBadge" style="color:var(--accent);font-weight:600"></span>
+            <span id="srcLink" style="display:block;margin-top:5px"></span>
             <span id="qFlag" style="display:block;margin-top:5px;color:var(--warn)"></span>
             <span id="archWarn" style="display:block;margin-top:5px;color:var(--over)"></span>
           </p>
@@ -323,7 +327,7 @@
     線性注意力層(Mamba / Gated DeltaNet / KDA)狀態固定不隨上下文成長,不計入。MLA 走壓縮路徑 <code>latent × …</code>(不 ×2)。
     <strong>總層數 ≠ 有 KV 的層數</strong>——2026 的新模型多為混合架構,直接用總層數會高估數倍。<br>
     <strong>張量並行(TP)</strong>取 2 的冪。GQA 的 KV 最多切到 <code>KV heads</code> 份;<strong>MLA 的 KV 在各卡複製、不隨 TP 遞減</strong>——這是 DeepSeek 類模型常被低估之處。<br>
-    數值以 GiB(2³⁰ bytes)計。統一記憶體機種(EdgeXpert/DGX Spark (GB10)、Jetson Thor、RTX Spark (N1x))已扣除 OS/CPU 保留。實際佔用仍會因 vLLM / TensorRT-LLM 的分配策略而異,結果為工程估算而非保證值。模型架構為公開規格參考值,請以官方 config 為準。<br>
+    數值以 GiB(2³⁰ bytes)計。<strong>加速卡標稱的「96GB」等容量本身即為 2³⁰ 進位</strong>——顯示記憶體以 2 的冪次顆粒組成,nvidia-smi 對「80GB」H100 回報 81,920 MiB(= 80 GiB),故本表一律以 GiB 標示,未做十進位換算。統一記憶體機種(EdgeXpert/DGX Spark (GB10)、Jetson Thor、RTX Spark (N1x))已扣除 OS/CPU 保留。實際佔用仍會因 vLLM / TensorRT-LLM 的分配策略而異,結果為工程估算而非保證值。模型架構為公開規格參考值,請以官方 config 為準。<br>
     <strong>電費</strong>= TDP × 負載率 × 8760 小時 × 電價,僅計加速器本身,未含主機、散熱與 PUE。TDP 為典型板卡功耗參考值(統一記憶體機種為整機),實際依 SKU 與散熱設定而異。<br>
     <strong>4-bit 區塊浮點</strong>:NVFP4 為每 16 個元素共用一個 FP8(E4M3)縮放因子(+12.5%),MXFP4 為每 32 個共用一個 E8M0 縮放因子(+6.25%),故兩者實際佔用不同於純 INT4。
     劃掉的格式表示該模型目前無公開權重,不可選;NVFP4 另需 Blackwell 世代硬體才有原生加速。
@@ -335,45 +339,48 @@
    Lsw=滑動視窗層數(KV 上限 win),其餘層為線性注意力(Mamba/DeltaNet,KV 可忽略)。
    lat>0 表示 MLA 壓縮路徑,此時 Lf 為 MLA 層數。
    grp: A=64GB 本地 / B=128GB / C=資料中心 / old=舊世代對照。
-   q 標記架構為估值(廠商未完整公開)。 */
+   q 標記架構為估值(廠商未完整公開)。
+   src = 規格來源的 HuggingFace repo(架構數值應以其 config.json 為準)。
+        全部以 HF API 逐一驗證過存在;唯 Qwen3.8-Max 無官方權重(僅第三方蒸餾/量化),故無 src。
+        NVIDIA 兩個 Nemotron 指向 -BF16 版:無後綴的 repo 需授權(401),BF16 版為公開且含完整 config。 */
 const MODELS = [
   {id:"custom", name:"— 自訂 (Custom) —", grp:"A", p:27.8, L:64, Lf:16, Lsw:0, win:0, h:5120, kvh:4, hd:256, lat:0, v:248320, t:"自訂"},
 
   // ---- A:64GB 本地 ----
-  {id:"gptoss-20b", name:"gpt-oss 20B", grp:"A", p:21, L:24, Lf:12, Lsw:12, win:128, h:2880, kvh:8, hd:64, lat:0, v:201088, t:"MoE · GQA + 帶狀稀疏 ｜ 3.6B active"},
-  {id:"qwen36-27b", name:"Qwen3.6 27B", grp:"A", p:27, L:64, Lf:16, Lsw:0, win:0, h:5120, kvh:4, hd:256, lat:0, v:248320, t:"Dense · 48×DeltaNet + 16×GQA"},
-  {id:"qwen38-27b", name:"Qwen3.8 27B", grp:"A", p:27.8, L:64, Lf:16, Lsw:0, win:0, h:5120, kvh:4, hd:256, lat:0, v:248320, t:"Dense · 48×DeltaNet + 16×GQA"},
-  {id:"qwen36-35b", name:"Qwen3.6 35B-A3B", grp:"A", p:35, L:40, Lf:10, Lsw:0, win:0, h:2048, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 30×DeltaNet + 10×GQA ｜ 3B active"},
-  {id:"nemotron35-light", name:"Nemotron 3.5 Lightning 30B-A3B", grp:"A", p:31.6, L:52, Lf:6, Lsw:0, win:0, h:2688, kvh:2, hd:128, lat:0, v:131072, t:"MoE · 24×Mamba-2 + 6×注意力 + 22×MoE ｜ 3.6B active"},
-  {id:"glimmer-30b", name:"Muse Glimmer 30B (Meta)", grp:"A", p:29.6, L:52, Lf:13, Lsw:39, win:2048, h:6656, kvh:2, hd:128, lat:0, v:202048, t:"Dense · 39×局部(w2048) + 13×全域"},
-  {id:"gemma4-26b", name:"Gemma 4 26B-A4B", grp:"A", p:26, L:30, Lf:4, Lsw:26, win:1024, h:2816, kvh:8, hd:256, lat:0, v:262144, t:"MoE · 26×滑窗(w1024) + 4×全域 ｜ 4B active"},
-  {id:"gemma4-31b", name:"Gemma 4 31B", grp:"A", p:31, L:60, Lf:10, Lsw:50, win:1024, h:5376, kvh:16, hd:256, lat:0, v:262144, t:"Dense · 50×滑窗(w1024) + 10×全域", q:"config 讀取全注意力層數為 8 或 10 不一致,取較保守的 10;全域層 global_head_dim 為 512,此處以 256 計"},
+  {id:"gptoss-20b", name:"gpt-oss 20B", grp:"A", p:21, L:24, Lf:12, Lsw:12, win:128, h:2880, kvh:8, hd:64, lat:0, v:201088, t:"MoE · GQA + 帶狀稀疏 ｜ 3.6B active", src:"openai/gpt-oss-20b"},
+  {id:"qwen36-27b", name:"Qwen3.6 27B", grp:"A", p:27, L:64, Lf:16, Lsw:0, win:0, h:5120, kvh:4, hd:256, lat:0, v:248320, t:"Dense · 48×DeltaNet + 16×GQA", src:"Qwen/Qwen3.6-27B"},
+  {id:"qwen38-27b", name:"Qwen3.8 27B", grp:"A", p:27.8, L:64, Lf:16, Lsw:0, win:0, h:5120, kvh:4, hd:256, lat:0, v:248320, t:"Dense · 48×DeltaNet + 16×GQA", src:"Qwen/Qwen3.8-27B"},
+  {id:"qwen36-35b", name:"Qwen3.6 35B-A3B", grp:"A", p:35, L:40, Lf:10, Lsw:0, win:0, h:2048, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 30×DeltaNet + 10×GQA ｜ 3B active", src:"Qwen/Qwen3.6-35B-A3B"},
+  {id:"nemotron35-light", name:"Nemotron 3.5 Lightning 30B-A3B", grp:"A", p:31.6, L:52, Lf:6, Lsw:0, win:0, h:2688, kvh:2, hd:128, lat:0, v:131072, t:"MoE · 24×Mamba-2 + 6×注意力 + 22×MoE ｜ 3.6B active", src:"nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16"},
+  {id:"glimmer-30b", name:"Muse Glimmer 30B (Meta)", grp:"A", p:29.6, L:52, Lf:13, Lsw:39, win:2048, h:6656, kvh:2, hd:128, lat:0, v:202048, t:"Dense · 39×局部(w2048) + 13×全域", src:"meta-models/Muse-Glimmer-30B"},
+  {id:"gemma4-26b", name:"Gemma 4 26B-A4B", grp:"A", p:26, L:30, Lf:4, Lsw:26, win:1024, h:2816, kvh:8, hd:256, lat:0, v:262144, t:"MoE · 26×滑窗(w1024) + 4×全域 ｜ 4B active", src:"google/gemma-4-26b-a4b"},
+  {id:"gemma4-31b", name:"Gemma 4 31B", grp:"A", p:31, L:60, Lf:10, Lsw:50, win:1024, h:5376, kvh:16, hd:256, lat:0, v:262144, t:"Dense · 50×滑窗(w1024) + 10×全域", q:"config 讀取全注意力層數為 8 或 10 不一致,取較保守的 10;全域層 global_head_dim 為 512,此處以 256 計", src:"google/gemma-4-31b"},
 
   // ---- B:128GB ----
-  {id:"nemotron3-super", name:"Nemotron 3 Super 120B-A12B", grp:"B", p:120, L:88, Lf:22, Lsw:0, win:0, h:4096, kvh:2, hd:128, lat:0, v:131072, t:"MoE · 44×Mamba-2 + 22×注意力 + 22×MoE ｜ 12B active"},
-  {id:"gptoss-120b", name:"gpt-oss 120B", grp:"B", p:117, L:36, Lf:18, Lsw:18, win:128, h:2880, kvh:8, hd:64, lat:0, v:201088, t:"MoE · GQA + 帶狀稀疏 ｜ 5.1B active"},
-  {id:"deepseek-v4-flash", name:"DeepSeek V4 Flash 284B-A13B", grp:"B", p:284, L:43, Lf:43, Lsw:0, win:0, h:4096, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA + DSA ｜ 13B active", q:"config 無層型陣列,以全 43 層保守估;官方稱 DSA 稀疏注意力在 1M ctx 下可再降至約 V3.2 的 10%"},
+  {id:"nemotron3-super", name:"Nemotron 3 Super 120B-A12B", grp:"B", p:120, L:88, Lf:22, Lsw:0, win:0, h:4096, kvh:2, hd:128, lat:0, v:131072, t:"MoE · 44×Mamba-2 + 22×注意力 + 22×MoE ｜ 12B active", src:"nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16"},
+  {id:"gptoss-120b", name:"gpt-oss 120B", grp:"B", p:117, L:36, Lf:18, Lsw:18, win:128, h:2880, kvh:8, hd:64, lat:0, v:201088, t:"MoE · GQA + 帶狀稀疏 ｜ 5.1B active", src:"openai/gpt-oss-120b"},
+  {id:"deepseek-v4-flash", name:"DeepSeek V4 Flash 284B-A13B", grp:"B", p:284, L:43, Lf:43, Lsw:0, win:0, h:4096, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA + DSA ｜ 13B active", q:"config 無層型陣列,以全 43 層保守估;官方稱 DSA 稀疏注意力在 1M ctx 下可再降至約 V3.2 的 10%", src:"deepseek-ai/DeepSeek-V4-Flash"},
 
   // ---- C:資料中心 ----
-  {id:"minimax-m25", name:"MiniMax M2.5 230B-A10B", grp:"C", p:230, L:62, Lf:62, Lsw:0, win:0, h:3072, kvh:8, hd:128, lat:0, v:200064, t:"MoE · 純 GQA(全層全注意力) ｜ 10B active"},
-  {id:"qwen35-397b", name:"Qwen3.5 397B-A17B", grp:"C", p:397, L:60, Lf:15, Lsw:0, win:0, h:4096, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 45×DeltaNet + 15×GQA ｜ 17B active"},
-  {id:"glm52", name:"GLM-5.2 744B-A40B", grp:"C", p:744, L:78, Lf:78, Lsw:0, win:0, h:6144, kvh:0, hd:0, lat:576, v:154880, t:"MoE · MLA + DSA ｜ 40B active"},
-  {id:"kimi-k26", name:"Kimi K2.6 ~1T-A32B", grp:"C", p:1000, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:163840, t:"MoE · MLA(全層) ｜ 32B active"},
-  {id:"deepseek-v4-pro", name:"DeepSeek V4-Pro 1.6T-A49B", grp:"C", p:1600, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA + DSA ｜ 49B active", q:"config 無層型陣列,以全 61 層保守估"},
-  {id:"qwen38-max", name:"Qwen3.8-2.4T-A95B (Max)", grp:"C", p:2400, L:92, Lf:23, Lsw:0, win:0, h:8192, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 69×線性 + 23×全注意力 ｜ 95B active", q:"hidden 與 KV heads 未確認"},
-  {id:"kimi-k3", name:"Kimi K3 2.8T-A104B", grp:"C", p:2800, L:93, Lf:25, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:163840, t:"MoE · 69×KDA + 25×Gated MLA ｜ 104B active"},
+  {id:"minimax-m25", name:"MiniMax M2.5 230B-A10B", grp:"C", p:230, L:62, Lf:62, Lsw:0, win:0, h:3072, kvh:8, hd:128, lat:0, v:200064, t:"MoE · 純 GQA(全層全注意力) ｜ 10B active", src:"MiniMaxAI/MiniMax-M2.5"},
+  {id:"qwen35-397b", name:"Qwen3.5 397B-A17B", grp:"C", p:397, L:60, Lf:15, Lsw:0, win:0, h:4096, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 45×DeltaNet + 15×GQA ｜ 17B active", src:"Qwen/Qwen3.5-397B-A17B"},
+  {id:"glm52", name:"GLM-5.2 744B-A40B", grp:"C", p:744, L:78, Lf:78, Lsw:0, win:0, h:6144, kvh:0, hd:0, lat:576, v:154880, t:"MoE · MLA + DSA ｜ 40B active", src:"zai-org/GLM-5.2"},
+  {id:"kimi-k26", name:"Kimi K2.6 ~1T-A32B", grp:"C", p:1000, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:163840, t:"MoE · MLA(全層) ｜ 32B active", src:"moonshotai/Kimi-K2.6"},
+  {id:"deepseek-v4-pro", name:"DeepSeek V4-Pro 1.6T-A49B", grp:"C", p:1600, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA + DSA ｜ 49B active", q:"config 無層型陣列,以全 61 層保守估", src:"deepseek-ai/DeepSeek-V4-Pro"},
+  {id:"qwen38-max", name:"Qwen3.8-2.4T-A95B (Max)", grp:"C", p:2400, L:92, Lf:23, Lsw:0, win:0, h:8192, kvh:2, hd:256, lat:0, v:248320, t:"MoE · 69×線性 + 23×全注意力 ｜ 95B active", q:"無官方公開權重(HF 上僅有第三方蒸餾/量化版),架構全為推估;hidden 與 KV heads 未確認"},
+  {id:"kimi-k3", name:"Kimi K3 2.8T-A104B", grp:"C", p:2800, L:93, Lf:25, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:163840, t:"MoE · 69×KDA + 25×Gated MLA ｜ 104B active", src:"moonshotai/Kimi-K3"},
 
   // ---- 舊世代(預設隱藏,對照用) ----
-  {id:"qwen3-8b", name:"Qwen3 8B", grp:"old", p:8.2, L:36, Lf:36, Lsw:0, win:0, h:4096, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)"},
-  {id:"qwen3-14b", name:"Qwen3 14B", grp:"old", p:14.8, L:40, Lf:40, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)"},
-  {id:"qwen3-32b", name:"Qwen3 32B", grp:"old", p:32.8, L:64, Lf:64, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)"},
-  {id:"qwen3-30b-a3b", name:"Qwen3 30B-A3B", grp:"old", p:30.5, L:48, Lf:48, Lsw:0, win:0, h:2048, kvh:4, hd:128, lat:0, v:151936, t:"MoE · GQA ｜ 3B active"},
-  {id:"qwen3-235b", name:"Qwen3 235B-A22B", grp:"old", p:235, L:94, Lf:94, Lsw:0, win:0, h:4096, kvh:4, hd:128, lat:0, v:151936, t:"MoE · GQA ｜ 22B active"},
-  {id:"llama4-scout", name:"Llama 4 Scout 109B", grp:"old", p:109, L:48, Lf:48, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:202048, t:"MoE · GQA ｜ 17B active"},
-  {id:"llama4-mav", name:"Llama 4 Maverick 400B", grp:"old", p:400, L:48, Lf:48, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:202048, t:"MoE · GQA ｜ 17B active"},
-  {id:"glm46", name:"GLM-4.6 355B", grp:"old", p:355, L:92, Lf:92, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151552, t:"MoE · GQA ｜ 32B active"},
-  {id:"deepseek-v31", name:"DeepSeek-V3.1 671B", grp:"old", p:671, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA ｜ 37B active"},
-  {id:"deepseek-v32", name:"DeepSeek-V3.2 671B", grp:"old", p:671, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA ｜ 37B active"},
+  {id:"qwen3-8b", name:"Qwen3 8B", grp:"old", p:8.2, L:36, Lf:36, Lsw:0, win:0, h:4096, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)", src:"Qwen/Qwen3-8B"},
+  {id:"qwen3-14b", name:"Qwen3 14B", grp:"old", p:14.8, L:40, Lf:40, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)", src:"Qwen/Qwen3-14B"},
+  {id:"qwen3-32b", name:"Qwen3 32B", grp:"old", p:32.8, L:64, Lf:64, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151936, t:"Dense · GQA(全層全注意力)", src:"Qwen/Qwen3-32B"},
+  {id:"qwen3-30b-a3b", name:"Qwen3 30B-A3B", grp:"old", p:30.5, L:48, Lf:48, Lsw:0, win:0, h:2048, kvh:4, hd:128, lat:0, v:151936, t:"MoE · GQA ｜ 3B active", src:"Qwen/Qwen3-30B-A3B"},
+  {id:"qwen3-235b", name:"Qwen3 235B-A22B", grp:"old", p:235, L:94, Lf:94, Lsw:0, win:0, h:4096, kvh:4, hd:128, lat:0, v:151936, t:"MoE · GQA ｜ 22B active", src:"Qwen/Qwen3-235B-A22B"},
+  {id:"llama4-scout", name:"Llama 4 Scout 109B", grp:"old", p:109, L:48, Lf:48, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:202048, t:"MoE · GQA ｜ 17B active", src:"meta-llama/Llama-4-Scout-17B-16E-Instruct"},
+  {id:"llama4-mav", name:"Llama 4 Maverick 400B", grp:"old", p:400, L:48, Lf:48, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:202048, t:"MoE · GQA ｜ 17B active", src:"meta-llama/Llama-4-Maverick-17B-128E-Instruct"},
+  {id:"glm46", name:"GLM-4.6 355B", grp:"old", p:355, L:92, Lf:92, Lsw:0, win:0, h:5120, kvh:8, hd:128, lat:0, v:151552, t:"MoE · GQA ｜ 32B active", src:"zai-org/GLM-4.6"},
+  {id:"deepseek-v31", name:"DeepSeek-V3.1 671B", grp:"old", p:671, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA ｜ 37B active", src:"deepseek-ai/DeepSeek-V3.1"},
+  {id:"deepseek-v32", name:"DeepSeek-V3.2 671B", grp:"old", p:671, L:61, Lf:61, Lsw:0, win:0, h:7168, kvh:0, hd:0, lat:576, v:129280, t:"MoE · MLA ｜ 37B active", src:"deepseek-ai/DeepSeek-V3.2-Exp"},
 ];
 const GRP_LABEL = {A:"64GB 本地級", B:"128GB 級", C:"資料中心級", old:"舊世代(對照用)"};
 
@@ -422,7 +429,7 @@ const GPUS = [
   {name:"RTX PRO 2000 Blackwell", vram:16, tag:"GDDR7", res:1, maxN:8, tdp:70, mem:"gddr"},
   {name:"RTX PRO 4000 Blackwell", vram:24, tag:"GDDR7", res:1, maxN:8, tdp:140, mem:"gddr"},
   {name:"RTX PRO 6000 Blackwell", vram:96, tag:"GDDR7", res:2, maxN:8, tdp:600, mem:"gddr"},
-  {name:"RTX Spark (N1x)", vram:64, tag:"統一記憶體 · 最高 128GB", res:8, maxN:2, tdp:170, mem:"unified"},
+  {name:"RTX Spark (N1x)", vram:64, tag:"統一記憶體 · 最高 128 GiB", res:8, maxN:2, tdp:170, mem:"unified"},
   {name:"Jetson AGX Thor", vram:128, tag:"統一記憶體", res:12, maxN:2, tdp:130, mem:"unified"},
   {name:"EdgeXpert / DGX Spark (GB10)", vram:128, tag:"統一記憶體", res:12, maxN:2, tdp:240, mem:"unified"},
   {name:"H100", vram:80, tag:"HBM3", res:2, maxN:8, tdp:700, mem:"hbm"},
@@ -430,10 +437,36 @@ const GPUS = [
   {name:"B200", vram:192, tag:"HBM3e", res:4, maxN:8, tdp:1000, mem:"hbm"},
 ];
 
+// 上下文長度選單。這是 ctx 的唯一資料來源 —— SCN 範本引用下方的 id,不再各自寫死數字,
+// 避免「範本要的值選單裡沒有」這種兩邊漂移的矛盾。啟動時有斷言檢查(見 buildCtxList 之後)。
+// 代表性應用的依據:
+//   OpenClaw 官方 docs 的 context 範例為 ctx=32,000;「本機模型建議 ≥64k」僅見於社群整理,未確認。
+//   Hermes Agent 官方 FAQ 明訂 64,000 tokens 為最低門檻,低於此在啟動時即拒絕載入模型。
+//   Agent 光是 system prompt + tool schemas + bootstrap 就有約 25K tokens 的固定開銷。
+//   RAG 以 chunk 512 tokens × top-k 8–20 推估;程式開發依「多數模型 128k–200k」與中型 repo 導覽成本。
+// 註:影片/生圖生成刻意不列入。擴散模型(MiniMax H3、LTX-2.5)為雙向注意力、不保留 KV Cache,
+//     本頁公式對其不適用;且同一支 1080p/5s 影片在不同模型下序列長度相差 7.5 倍(LTX-2.5 約 32K、
+//     MiniMax H3 約 61K、HunyuanVideo 1.5 約 245K),不存在可寫進選單的單一數字。
+const CTX_OPTIONS = [
+  {g:"對話 / 助理",    id:"chat-2k",   v:2048,    t:"2K — 單輪問答 · 表單填寫"},
+  {g:"對話 / 助理",    id:"chat-4k",   v:4096,    t:"4K — 數位人 · 即時客服對話"},
+  {g:"對話 / 助理",    id:"chat-8k",   v:8192,    t:"8K — 一般對話助理"},
+  {g:"檢索 / 知識問答", id:"rag-16k",   v:16384,   t:"16K — 企業 RAG 單次檢索"},
+  {g:"檢索 / 知識問答", id:"rag-32k",   v:32768,   t:"32K — RAG + 多輪對話歷程"},
+  {g:"Agent / 工具呼叫", id:"agent-32k", v:32768,  t:"32K — OpenClaw 一般設定"},
+  {g:"Agent / 工具呼叫", id:"agent-64k", v:65536,  t:"64K — Hermes Agent 最低門檻 · OpenClaw 本機建議"},
+  {g:"Agent / 工具呼叫", id:"agent-128k",v:131072, t:"128K — 長時工作階段 · 多工具鏈"},
+  {g:"長文件處理",     id:"doc-128k",  v:131072,  t:"128K — 長文件 · 合約全文摘要"},
+  {g:"長文件處理",     id:"doc-256k",  v:262144,  t:"256K — 多文件比對 · 超長報告"},
+  {g:"程式開發",       id:"code-128k", v:131072,  t:"128K — 單一功能模組開發"},
+  {g:"程式開發",       id:"code-256k", v:262144,  t:"256K — 跨檔案重構 · 大型 repo 導覽"},
+  {g:"程式開發",       id:"code-1m",   v:1048576, t:"1M — 整個程式碼庫級"},
+];
+
 const SCN = {
-  rag:  {ctx:16384, users:16, frag:8},
-  human:{ctx:4096, users:48, frag:10},
-  doc:  {ctx:131072, users:4, frag:6},
+  rag:  {ctx:"rag-16k",  users:16, frag:8},
+  human:{ctx:"chat-4k",  users:48, frag:10},
+  doc:  {ctx:"doc-128k", users:4,  frag:6},
 };
 
 const FRAMEWORK_GIB = 1.2;   // CUDA context + 框架常駐,每張卡都要
@@ -469,6 +502,45 @@ function buildModelList(){
 $("showOld").onchange = () => { buildModelList(); applyModel(msel.value); calc(); };
 buildModelList();
 msel.value = "qwen38-27b";
+
+const ctxSel = $("ctx");
+function buildCtxList(){
+  ctxSel.replaceChildren();
+  let og = null, lastG = null;
+  CTX_OPTIONS.forEach(o => {
+    if (o.g !== lastG){
+      og = document.createElement("optgroup");
+      og.label = o.g;
+      ctxSel.append(og);
+      lastG = o.g;
+    }
+    og.append(new Option(o.t, o.id));
+  });
+  ctxSel.append(new Option("自訂…", "custom"));
+}
+buildCtxList();
+// 資料層斷言:每個範本引用的 ctx id 都必須存在,否則點範本會靜默套不上值。
+Object.entries(SCN).forEach(([k, s]) => {
+  if (!CTX_OPTIONS.some(o => o.id === s.ctx))
+    console.error(`[SCN] 範本「${k}」的 ctx id "${s.ctx}" 不在 CTX_OPTIONS 中`);
+});
+
+const syncCtxCustom = () => { $("ctxCustom").hidden = ctxSel.value !== "custom"; };
+// 選單存的是 id 而非數字(128K 在三個分組各出現一次,用數字當 value 會抓錯選項)
+const getCtx = () => ctxSel.value === "custom"
+  ? num("ctxCustom", 8192)
+  : (CTX_OPTIONS.find(o => o.id === ctxSel.value)?.v ?? 8192);
+// 依數值還原(供設定碼使用):找得到對應選項就選它,找不到就落到自訂
+function setCtx(n){
+  const o = CTX_OPTIONS.find(x => x.v === n);
+  ctxSel.value = o ? o.id : "custom";
+  $("ctxCustom").value = n;
+  syncCtxCustom();
+}
+setCtx(8192);
+// 數值一旦被手動改動,就不再等於任一範本的 ctx+users+frag 完整組合,必須取消「已套用」狀態
+const clearScn = () => document.querySelectorAll('.scn[aria-pressed="true"]')
+  .forEach(o => o.setAttribute("aria-pressed", "false"));
 
 function buildSeg(el, items, key){
   el.replaceChildren(...items.map(it => {
@@ -506,8 +578,21 @@ function applyModel(id){
     $("latent").value = m.lat; $("vocab").value = m.v;
   }
   $("attnBadge").textContent = m.t;
+  setSrcLink(m);
   $("qFlag").textContent = m.q ? "⚠ 未確認:" + m.q : "";
   normalizeWprec();
+}
+// 規格來源可追溯:架構數值應能回推到某個 config.json。無 src 者明講「無官方權重」而非留白。
+function setSrcLink(m){
+  const el = $("srcLink");
+  if (m.src){
+    el.innerHTML = `規格來源:<a href="https://huggingface.co/${m.src}/blob/main/config.json"
+      target="_blank" rel="noopener noreferrer" style="color:var(--accent)">${m.src}</a> ↗`;
+  } else if (m.id === "custom"){
+    el.textContent = "";
+  } else {
+    el.innerHTML = `<span style="color:var(--text-3)">規格來源:無官方公開權重,架構為推估值</span>`;
+  }
 }
 msel.onchange = () => { applyModel(msel.value); calc(); };
 applyModel("qwen38-27b");
@@ -515,32 +600,37 @@ applyModel("qwen38-27b");
 document.querySelectorAll(".scn").forEach(c => {
   c.onclick = () => {
     const s = SCN[c.dataset.scn];
-    $("ctx").value = s.ctx; $("users").value = s.users; $("frag").value = s.frag;
+    ctxSel.value = s.ctx; syncCtxCustom();
+    $("users").value = s.users; $("frag").value = s.frag;
     document.querySelectorAll(".scn").forEach(o => o.setAttribute("aria-pressed", String(o === c)));
     calc();
   };
 });
 
 const ARCH_IDS = ["params","layers","hidden","lfull","lswa","win","kvheads","headdim","latent","vocab","chunk"];
-[...ARCH_IDS, "ctx", "users"].forEach(id => {
+[...ARCH_IDS, "ctxCustom", "users"].forEach(id => {
   $(id).addEventListener("input", () => {
     if (ARCH_IDS.includes(id)){
       msel.value = "custom";
       $("attnBadge").textContent = "自訂";
+      $("srcLink").textContent = "";   // 已偏離內建規格,來源連結不再成立
       $("qFlag").textContent = "";
       normalizeWprec(); // custom 對 FP4 的支援與前一個模型不同,按鈕須重新渲染
+    } else {
+      clearScn();
     }
     calc();
   });
 });
-$("frag").addEventListener("input", calc);
+ctxSel.addEventListener("change", () => { syncCtxCustom(); clearScn(); calc(); });
+$("frag").addEventListener("input", () => { clearScn(); calc(); });
 ["rate", "util"].forEach(id => $(id).addEventListener("input", calc));
 
 function calc(){
   const p = num("params",1), L = num("layers",1), h = num("hidden",4096);
   const Lf = num("lfull",0), Lsw = num("lswa",0), win = num("win",0);
   const kvh = num("kvheads",0), hd = num("headdim",0), lat = num("latent",0), vocab = num("vocab",150000);
-  const chunk = num("chunk",2048), ctx = num("ctx",8192), users = num("users",1);
+  const chunk = num("chunk",2048), ctx = getCtx(), users = num("users",1);
   const fragPct = num("frag",8);
   const wp = WPREC.find(x => x.id === state.wprec);
   const kb = KVPREC.find(x => x.id === state.kvprec).b;
@@ -620,7 +710,7 @@ function calc(){
     const cls = !n ? "over" : n === 1 ? "ok" : "warn";
     const txt = !n ? `超出 ${g.maxN}× 上限` : n === 1 ? "單卡可容" : `${n}× 並行`;
     return `<tr><td class="name mem-${g.mem}">${g.name}<br><span class="tagline">${g.tag}</span></td>`
-      + `<td class="vram">${g.vram} GB</td><td class="vram">${usable} GiB</td>`
+      + `<td class="vram">${g.vram} GiB</td><td class="vram">${usable} GiB</td>`
       + `<td>${n ? n + "×" : "—"}</td>`
       + `<td class="vram">${n ? money(yearlyCost(g) * n) : "—"}</td>`
       + `<td><span class="pill ${cls}">${txt}</span></td></tr>`;
@@ -693,9 +783,11 @@ function flash(msg, isErr){
   flashTimer = setTimeout(() => { el.textContent = ""; }, 2600);
 }
 
-const CFG_IDS = ["ctx","users","frag","params","layers","hidden","lfull","lswa","win","kvheads","headdim","latent","vocab","chunk","rate","util"];
+// ctx 不在 CFG_IDS 內:選單的 value 是 id,設定碼一律存「解析後的數值」,
+// 舊版(ctx 還是 number input 時)產生的設定碼因此仍可正確還原。
+const CFG_IDS = ["users","frag","params","layers","hidden","lfull","lswa","win","kvheads","headdim","latent","vocab","chunk","rate","util"];
 const cfgEncode = () => {
-  const o = {m: msel.value, w: state.wprec, k: state.kvprec};
+  const o = {m: msel.value, w: state.wprec, k: state.kvprec, ctx: getCtx()};
   CFG_IDS.forEach(id => o[id] = $(id).value);
   return btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 };
@@ -713,7 +805,9 @@ function cfgApply(code){
   normalizeWprec();
   buildSeg($("kvprec"), KVPREC, "kvprec");
   CFG_IDS.forEach(id => { if (o[id] !== undefined) $(id).value = o[id]; });
-  if (o.m === "custom") $("attnBadge").textContent = "自訂";
+  if (o.ctx !== undefined && isFinite(+o.ctx)) setCtx(+o.ctx);
+  clearScn();
+  if (o.m === "custom"){ $("attnBadge").textContent = "自訂"; $("srcLink").textContent = ""; }
   calc();
   flash("設定已載入");
 }
@@ -726,7 +820,7 @@ $("copyCsv").onclick = () => {
     ["項目", "值"], ["模型", s.model], ["權重精度", s.wprec], ["KV 精度", s.kvprec],
     ["上下文", s.ctx], ["並發", s.users], [],
     ["記憶體項目", "GiB"], ...s.rows.map(r => [r[0], fmt(r[1])]), [],
-    ["加速卡", "VRAM(GB)", "可用(GiB)", "張量並行", "年電費"],
+    ["加速卡", "VRAM(GiB)", "可用(GiB)", "張量並行", "年電費"],
     ...s.gpus.map(g => [g[0], g[1], g[2], g[3] ? g[3] + "x" : "不可行", g[4] || ""]),
   ];
   copyText("﻿" + lines.map(l => l.map(esc).join(",")).join("\n"), "CSV 已複製到剪貼簿");
@@ -746,16 +840,27 @@ $("loadCfg").onclick = () => {
   box.focus();
 };
 
-const setTheme = dark => {
-  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+// 主題三態:未設 data-theme = 跟隨系統(由 CSS 的 prefers-color-scheme 決定),
+// 設了就是使用者明確指定。載入時刻意「不寫」屬性,否則系統態永遠不存在、
+// CSS 的 prefers-color-scheme 分支也就無從驗證。
+const mqDark = matchMedia("(prefers-color-scheme:dark)");
+const isDark = () => {
+  const attr = document.documentElement.getAttribute("data-theme");
+  return attr ? attr === "dark" : mqDark.matches;
+};
+function syncThemeBtn(){
+  const dark = isDark();
   $("themeIcon").textContent = dark ? "☾" : "☀";
   $("themeTxt").textContent = dark ? "深色" : "淺色";
   $("themeBtn").setAttribute("aria-label", `切換至${dark ? "淺色" : "深色"}主題`);
+}
+$("themeBtn").onclick = () => {
+  document.documentElement.setAttribute("data-theme", isDark() ? "light" : "dark");
+  syncThemeBtn();
 };
-$("themeBtn").onclick = () => setTheme(
-  !(document.documentElement.getAttribute("data-theme") === "dark")
-);
-setTheme(matchMedia("(prefers-color-scheme:dark)").matches);
+// 仍在系統態時,使用者切換 OS 主題要同步按鈕外觀(已指定時 isDark() 讀屬性,此處等同 no-op)
+mqDark.addEventListener("change", syncThemeBtn);
+syncThemeBtn();
 
 calc();
 // 獨立網址使用時,#cfg=... 可直接還原情境(Artifact 內請改用「載入設定碼」)

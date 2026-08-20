@@ -6,7 +6,14 @@
 
 - [ ] 開啟頁面無 console 錯誤
 - [ ] 預設模型(Qwen3.8 27B)顯示合理的 GiB 數字,非 NaN/Infinity
-- [ ] 深色 / 淺色 / 系統預設(不設 `data-theme`)三種狀態顏色都正確,無透明背景透出
+- [ ] **主題三態**:載入後 `document.documentElement` 應**沒有** `data-theme` 屬性(系統態,由 CSS
+      `prefers-color-scheme` 決定);按一次切換鈕才寫入 `light`/`dark`。三種狀態顏色都正確,無透明背景透出。
+      在 OS 主題設定與頁面之間來回切換,系統態下按鈕圖示要跟著變
+
+```js
+// 系統態驗證:重新載入後應印出 null
+console.log(document.documentElement.getAttribute('data-theme'));
+```
 
 ## 2. 全模型 × 全精度掃描(零錯誤是底線)
 
@@ -86,6 +93,66 @@ console.log({before, after:document.getElementById('totalGB').textContent}); // 
 
 - [ ] 舊世代模型的設定碼要能自動勾選「顯示舊世代模型」並正確還原
 
+## 7.5 上下文長度下拉選單(`CTX_OPTIONS` / `SCN`)
+
+完整自動化測試在 jsdom 下跑,共 44 項:
+
+```powershell
+# 一次性:npm install jsdom --no-save
+node ctx-test.js   # 腳本見本節末尾說明
+```
+
+console 快速版:
+
+```js
+// 三個範本的 ctx 必須都能在選單中找到,否則點範本會靜默套不上值
+console.log(Object.entries(SCN).map(([k,s]) =>
+  `${k}: ${s.ctx} ${CTX_OPTIONS.some(o=>o.id===s.ctx)?'✓':'✗ 不在 CTX_OPTIONS'}`));
+// 128K 在三個分組各出現一次,選任一個都必須拿到 131072 且 value 不被別組搶走
+for(const id of ['agent-128k','doc-128k','code-128k']){
+  ctx.value=id; ctx.dispatchEvent(new Event('change'));
+  console.log(id, ctx.value===id, getCtx()===131072);
+}
+```
+
+- [ ] 選單為 5 個 optgroup(對話/檢索/Agent/長文件/程式開發)+ 13 選項 + 「自訂…」
+- [ ] **選單 value 是 id 不是數字** —— 131072 在三組重複出現,用數字當 value 會永遠選到第一個
+- [ ] 點三個範本後,ctx 分別為 4096 / 16384 / 131072,且只有被點的那顆 `aria-pressed="true"`
+- [ ] **關鍵回歸點**:點任一範本後手動改 ctx / users / frag,範本按鈕的 pressed 狀態必須清空 —— 此時數值已不等於範本的三值組合,若仍亮著即為 P4 修過的 bug 復發
+- [ ] 改「架構欄位」不該清空 pressed(那只切換為自訂模型,與工作負載無關)
+- [ ] 選「自訂…」才顯示數字輸入框,範圍仍為 128–10,000,000(超出要被夾住)
+- [ ] 設定碼存的是**解析後的數值**而非 id;舊版(ctx 還是 number input 時)的設定碼仍要能還原,數值對得上選項就選它、對不上就落到自訂
+- [ ] 選單標籤中不得出現影片/生圖選項 —— 擴散模型為雙向注意力、不保留 KV Cache,本頁公式對其不適用(詳見「已知限制」)
+
+## 7.6 VRAM 單位一致性(GB / GiB)
+
+**加速卡標稱的「96GB」本身就是 96 GiB**,不是十進位 96×10⁹ bytes。顯示記憶體以 2 的冪次顆粒組成,
+nvidia-smi 對「80GB」H100 回報 81,920 MiB(= 80 GiB)。因此 `g.vram - g.res` 是同單位相減,**正確**。
+
+- [ ] **反向回歸點**:若有人把 `vram` 當十進位 GB「修正」成 `× 10⁹ / 2³⁰`,每張卡會被低估 6.9%
+      (RTX PRO 6000 可用量會從 94 GiB 掉到 87.41 GiB),落在 88–94 GiB 的配置會從「單卡可容」
+      被誤判為「需 2×」。此為誤修,不是修正
+- [ ] GPU 表格的 VRAM 與可用量兩欄都標 `GiB`,表格內不得出現裸 `GB`
+- [ ] CSV 表頭為 `VRAM(GiB)`
+- [ ] 頁尾說明保留「加速卡標稱容量本身即為 2³⁰ 進位」那段(這個誤解很容易重複踩到)
+
+## 7.7 模型規格來源追溯(`src` 欄位)
+
+```js
+// 全部 src 應可解析且回應 200(需網路;逐一打 HF API)
+(async()=>{for(const m of MODELS.filter(m=>m.src)){
+  const r=await fetch(`https://huggingface.co/api/models/${m.src}`); // 不可用 encodeURIComponent,會把 / 編成 %2F
+  if(r.status!==200) console.warn('✗',m.id,m.src,r.status);
+}console.log('src 檢查完成')})();
+```
+
+- [ ] 28 個內建模型中 27 個有 `src`,唯一例外是 Qwen3.8-Max(無官方公開權重,僅第三方蒸餾/量化)
+- [ ] 無 `src` 者必須在 `q:` 中明講「無官方公開權重」,UI 也要顯示該說明而非留白
+- [ ] NVIDIA 兩個 Nemotron 指向 `-BF16` 版 —— 無後綴的 repo 需授權(HF API 回 401)
+- [ ] 選中模型時 `#srcLink` 顯示指向 `config.json` 的連結,且帶 `rel="noopener noreferrer"`
+- [ ] 編輯任一架構欄位切換為「自訂」後,來源連結必須清空(已偏離內建規格,連結不再成立)
+- [ ] 模型規格會隨新版本變動,`src` 是下次校驗的起點,不是「永久正確」的保證
+
 ## 8. 匯出
 
 - [ ] 「複製 CSV」後貼上內容,KV/權重精度欄要是人看得懂的標籤(`FP16`),不是內部 id(`fp16`)
@@ -114,3 +181,11 @@ console.log({溢出:de.scrollWidth>de.clientWidth, 寬度:`${de.clientWidth}/${d
 - DeepSeek V4 Flash/Pro 的 `layer_types` 未公開,以全部層數保守估算 KV(見 `index.html` 內 `q:` 欄位註記)
 - 電費估算未含主機、散熱、PUE,僅計加速卡本身
 - 4-bit 支援表(`FP4_SUPPORT`)會隨新量化 checkpoint 釋出而過時,需人工更新
+- **本頁不涵蓋影片/生圖生成**。MiniMax H3、LTX-2.5 等擴散模型為雙向全時空自注意力,
+  每個去噪步驟重算全序列、不累積 KV Cache,`2 × KVheads × headdim × …` 公式對其不成立
+  (H3 模型卡提到的 cache 是 AdaLN 調變參數預算快取,與注意力 KV 無關)。
+  且同一支 1080p/5 秒影片的序列長度隨模型相差 7.5 倍 —— LTX-2.5 約 32K(32× 空間 / 8× 時間)、
+  MiniMax H3 約 61K(32× / 4×)、HunyuanVideo 1.5 約 245K(16× / 4×),不存在可寫進選單的單一數字。
+  唯一適用本頁公式的是**自迴歸**影片模型(如 LongCat-Video:5 秒 480p / 38K tokens / KV Cache 34GB)。
+- jsdom 未實作 `matchMedia`,自動化測試需在 `beforeParse` 補 stub(真實瀏覽器有,非頁面缺陷)。
+  另注意頁面 top-level 的 `const`/`let` 綁定不會掛到 `window`,測試需經 `window.eval()` 取用。
