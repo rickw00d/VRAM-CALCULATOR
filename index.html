@@ -220,6 +220,10 @@
       <span class="st"><span class="ic" aria-hidden="true">📄</span>長文件處理 / 摘要</span>
       <span class="sd">超長上下文、低並發批次。對應 PDF-to-Podcast / 文件擷取類 Blueprint。</span>
     </button>
+    <button class="scn" data-scn="agent" aria-pressed="false">
+      <span class="st"><span class="ic" aria-hidden="true">🤖</span>本地 Agent(DGX Spark)</span>
+      <span class="sd">OpenClaw 與 Hermes Agent 共用同一組配置。依 NVIDIA DGX Spark playbook 的 agent-ready recipe:Qwen3.6 35B NVFP4 + FP8 KV、256K 上下文。</span>
+    </button>
   </div>
 
   <div class="grid">
@@ -441,17 +445,26 @@ const GRP_LABEL = {A:"64GB 本地級", B:"128GB 級", C:"資料中心級", old:"
 
 /* 4-bit 區塊浮點格式並非每個模型都有公開權重。僅列出有官方或社群 checkpoint 者;
    其餘一律停用,避免給出不存在的配置。未列入 = 兩種 FP4 皆不可選。 */
+/* 對照來源:NVIDIA dgx-spark-playbooks 的 vLLM「Model Support Matrix」,
+   以及逐一打 HF API 驗證 repo 存在(見 TESTING.md §7.8)。
+   https://github.com/NVIDIA/dgx-spark-playbooks/blob/main/nvidia/vllm/README.md */
 const FP4_SUPPORT = {
   custom:              ["nvfp4", "mxfp4"],
-  "gptoss-20b":        ["mxfp4"],            // 原生 MXFP4 發布
+  "gptoss-20b":        ["mxfp4"],            // 原生 MXFP4 發布(NVIDIA 支援表亦列 MXFP4)
   "gptoss-120b":       ["mxfp4"],            // 原生 MXFP4 發布
   "kimi-k3":           ["mxfp4"],
-  "qwen36-27b":        ["nvfp4"],
+  "qwen36-27b":        ["nvfp4"],            // nvidia/Qwen3.6-27B-NVFP4
   "qwen38-27b":        ["nvfp4"],
-  "gemma4-31b":        ["nvfp4"],
+  "qwen36-35b":        ["nvfp4"],            // nvidia/Qwen3.6-35B-A3B-NVFP4 — DGX Spark agent-ready recipe 用的就是這個
+  "gemma4-31b":        ["nvfp4"],            // nvidia/Gemma-4-31B-IT-NVFP4
   "nemotron35-light":  ["nvfp4"],            // NVIDIA 以 NVFP4 權重發布
-  "nemotron3-super":   ["nvfp4"],            // NVIDIA 提供 NVFP4 版本
+  "nemotron3-super":   ["nvfp4"],            // nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
   "deepseek-v4-flash": ["nvfp4"],            // MoE 專家層為 FP4
+  // 舊世代:NVIDIA 支援表明列有官方 NVFP4 checkpoint
+  "qwen3-8b":          ["nvfp4"],            // nvidia/Qwen3-8B-NVFP4
+  "qwen3-14b":         ["nvfp4"],            // nvidia/Qwen3-14B-NVFP4
+  "qwen3-32b":         ["nvfp4"],            // nvidia/Qwen3-32B-NVFP4
+  // 註:Gemma 4 26B-A4B 刻意不列 —— NVIDIA 支援表對它只有 Base,無 NVFP4(HF 上該 repo 亦回 401)
 };
 const fp4Ok = (modelId, precId) => {
   const pr = WPREC.find(x => x.id === precId);
@@ -511,6 +524,7 @@ const CTX_OPTIONS = [
   {g:"Agent / 工具呼叫", id:"agent-32k", v:32768,  t:"32K — OpenClaw 一般設定"},
   {g:"Agent / 工具呼叫", id:"agent-64k", v:65536,  t:"64K — Hermes Agent 最低門檻 · OpenClaw 本機建議"},
   {g:"Agent / 工具呼叫", id:"agent-128k",v:131072, t:"128K — 長時工作階段 · 多工具鏈"},
+  {g:"Agent / 工具呼叫", id:"agent-256k",v:262144, t:"256K — NVIDIA DGX Spark agent recipe"},
   {g:"長文件處理",     id:"doc-128k",  v:131072,  t:"128K — 長文件 · 合約全文摘要"},
   {g:"長文件處理",     id:"doc-256k",  v:262144,  t:"256K — 多文件比對 · 超長報告"},
   {g:"程式開發",       id:"code-128k", v:131072,  t:"128K — 單一功能模組開發"},
@@ -518,10 +532,19 @@ const CTX_OPTIONS = [
   {g:"程式開發",       id:"code-1m",   v:1048576, t:"1M — 整個程式碼庫級"},
 ];
 
+/* 範本。ctx 引用 CTX_OPTIONS 的 id;model/wprec/kvprec/chunk 為選填。
+   前三個是「工作負載形狀」(只描述怎麼用),agent 則是一整套實機配方
+   —— 它的價值正在於同時指定模型與精度,少了 NVFP4+FP8 KV 就塞不進 Spark。 */
 const SCN = {
   rag:  {ctx:"rag-16k",  users:16, frag:8},
   human:{ctx:"chat-4k",  users:48, frag:10},
   doc:  {ctx:"doc-128k", users:4,  frag:6},
+  // NVIDIA DGX Spark playbook 的 agent-ready recipe。OpenClaw 與 Hermes Agent 兩份
+  // playbook 都委派給同一個 vLLM tab,所以是同一組配置、不需要分成兩個範本。
+  //   nvidia/Qwen3.6-35B-A3B-NVFP4 --kv-cache-dtype fp8 --max-model-len 262144
+  //   --max-num-seqs 4 --max-num-batched-tokens 8192 --gpu-memory-utilization 0.4
+  agent:{ctx:"agent-256k", users:4, frag:8,
+         model:"qwen36-35b", wprec:"nvfp4", kvprec:"fp8", chunk:8192},
 };
 
 const FRAMEWORK_GIB = 1.2;   // CUDA context + 框架常駐,每張卡都要
@@ -578,6 +601,16 @@ buildCtxList();
 Object.entries(SCN).forEach(([k, s]) => {
   if (!CTX_OPTIONS.some(o => o.id === s.ctx))
     console.error(`[SCN] 範本「${k}」的 ctx id "${s.ctx}" 不在 CTX_OPTIONS 中`);
+  if (s.model && !MODELS.some(m => m.id === s.model))
+    console.error(`[SCN] 範本「${k}」的 model "${s.model}" 不在 MODELS 中`);
+  if (s.wprec && !WPREC.some(x => x.id === s.wprec))
+    console.error(`[SCN] 範本「${k}」的 wprec "${s.wprec}" 不是有效的權重精度`);
+  // 最容易悄悄壞掉的一種:精度本身有效,但該模型沒有這個格式的公開權重,
+  // 套用時會被 fp4Ok 擋下並靜默退回 FP8,算出來的數字比預期大一倍以上。
+  if (s.model && s.wprec && !fp4Ok(s.model, s.wprec))
+    console.error(`[SCN] 範本「${k}」要求 ${s.wprec},但 FP4_SUPPORT 中 "${s.model}" 不支援 —— 套用後會退回 FP8`);
+  if (s.kvprec && !KVPREC.some(x => x.id === s.kvprec))
+    console.error(`[SCN] 範本「${k}」的 kvprec "${s.kvprec}" 不是有效的 KV 精度`);
 });
 
 const syncCtxCustom = () => { $("ctxCustom").hidden = ctxSel.value !== "custom"; };
@@ -655,6 +688,22 @@ applyModel("qwen38-27b");
 document.querySelectorAll(".scn").forEach(c => {
   c.onclick = () => {
     const s = SCN[c.dataset.scn];
+    // 順序有意義:applyModel() 內部會呼叫 normalizeWprec() 重建精度按鈕、且可能把
+    // 不支援的精度退回 FP8,所以模型一定要先套,精度才不會被它覆蓋掉。
+    if (s.model){
+      msel.value = s.model;
+      applyModel(s.model);
+    }
+    if (s.wprec && fp4Ok(msel.value, s.wprec)){
+      state.wprec = s.wprec;
+      buildSeg($("wprec"), WPREC, "wprec");
+    }
+    if (s.kvprec){
+      state.kvprec = s.kvprec;
+      buildSeg($("kvprec"), KVPREC, "kvprec");
+    }
+    // chunk 直接寫值不觸發 input 事件,因此不會把模型誤切成「自訂」
+    if (s.chunk !== undefined) $("chunk").value = s.chunk;
     ctxSel.value = s.ctx; syncCtxCustom();
     $("users").value = s.users; $("frag").value = s.frag;
     document.querySelectorAll(".scn").forEach(o => o.setAttribute("aria-pressed", String(o === c)));

@@ -153,6 +153,36 @@ nvidia-smi 對「80GB」H100 回報 81,920 MiB(= 80 GiB)。因此 `g.vram - g.re
 - [ ] 編輯任一架構欄位切換為「自訂」後,來源連結必須清空(已偏離內建規格,連結不再成立)
 - [ ] 模型規格會隨新版本變動,`src` 是下次校驗的起點,不是「永久正確」的保證
 
+## 7.8 FP4_SUPPORT 與 DGX Spark agent 範本
+
+`FP4_SUPPORT` 的權威來源是 NVIDIA dgx-spark-playbooks 的
+[vLLM Model Support Matrix](https://github.com/NVIDIA/dgx-spark-playbooks/blob/main/nvidia/vllm/README.md)。
+**注意 `build.nvidia.com` 是 SPA,WebFetch 會逾時 —— 要讀原始 markdown 走
+`raw.githubusercontent.com`。**
+
+```js
+// 逐一驗證 NVFP4 標記都有對應的官方 checkpoint(需網路)
+const NV = {"qwen36-35b":"nvidia/Qwen3.6-35B-A3B-NVFP4","qwen3-8b":"nvidia/Qwen3-8B-NVFP4",
+ "qwen3-14b":"nvidia/Qwen3-14B-NVFP4","qwen3-32b":"nvidia/Qwen3-32B-NVFP4",
+ "gemma4-31b":"nvidia/Gemma-4-31B-IT-NVFP4","qwen36-27b":"nvidia/Qwen3.6-27B-NVFP4"};
+(async()=>{for(const [id,repo] of Object.entries(NV)){
+  const r=await fetch(`https://huggingface.co/api/models/${repo}`); // 不可用 encodeURIComponent
+  console.log(fp4Ok(id,'nvfp4')?'✓':'✗', id, repo, r.status);
+}})();
+```
+
+- [ ] **最關鍵的回歸點**:點「本地 Agent(DGX Spark)」範本後,**權重應約 18 GiB、合計約 32 GiB**。
+      若權重跳到 ~65 GiB、合計 ~83 GiB,表示 `FP4_SUPPORT` 又漏了 `qwen36-35b`,
+      NVFP4 被 `fp4Ok()` 擋下並**靜默退回 FP16** —— 這種失敗不會報錯,只會算出錯誤答案
+- [ ] Gemma 4 26B-A4B **不可**選 NVFP4(NVIDIA 支援表對它只有 Base,HF 的 NVFP4 repo 回 401)
+- [ ] gpt-oss 20B/120B 仍只支援 MXFP4,不得出現 NVFP4
+- [ ] 全模型×全精度掃描應為 **153** 組(修此表前為 149,四個新增模型各 +1)
+- [ ] agent 範本應同時設定 model / wprec / kvprec / ctx / users / frag / chunk 七項
+- [ ] **順序回歸點**:`applyModel()` 內會呼叫 `normalizeWprec()` 重建精度按鈕並可能退回 FP8,
+      所以範本套用時模型必須先於精度。若順序顛倒,wprec 會被覆蓋成 FP8 而測試會抓到權重變大
+- [ ] 前三個工作負載範本(rag/human/doc)**不帶** model 欄位,點它們不該覆蓋使用者已選的模型
+- [ ] 啟動斷言:若某範本要求的 wprec 在 `FP4_SUPPORT` 中該模型不支援,console 要報錯
+
 ## 8. 匯出
 
 - [ ] 「複製 CSV」後貼上內容,KV/權重精度欄要是人看得懂的標籤(`FP16`),不是內部 id(`fp16`)

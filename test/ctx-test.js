@@ -47,8 +47,11 @@ t("select 取代 number input", sel.tagName === "SELECT");
 t("5 個 optgroup", groups.length === 5, groups.join(","));
 t("分組順序正確",
   groups.join("|") === "對話 / 助理|檢索 / 知識問答|Agent / 工具呼叫|長文件處理|程式開發", groups.join("|"));
-t("13 選項 + 自訂 = 14", sel.options.length === 14, "實得 " + sel.options.length);
-t("最後一項是自訂", sel.options[13].value === "custom");
+// 從 CTX_OPTIONS 推導而非寫死數字,新增選項時不必改測試
+const optCount = ev("CTX_OPTIONS.length");
+t(`${optCount} 選項 + 自訂 = ${optCount + 1}`, sel.options.length === optCount + 1,
+  "實得 " + sel.options.length);
+t("最後一項是自訂", sel.options[sel.options.length - 1].value === "custom");
 t("無影片/生圖選項(方案 A)",
   !/影片|生圖|1080p|LTX|MiniMax|Hunyuan|LongCat/.test(sel.textContent), sel.textContent);
 t("Agent 組含 OpenClaw 與 Hermes",
@@ -203,7 +206,54 @@ t("無 src 的模型明講「無官方公開權重」而非留白",
 $("layers").value = "40"; fire($("layers"), "input");
 t("改架構欄位切為自訂 → 來源連結清空", $("srcLink").textContent === "", $("srcLink").textContent);
 
-console.log("\n== 15. 執行期無新錯誤 ==");
+console.log("\n== 15. FP4_SUPPORT 對照 NVIDIA 官方 checkpoint ==");
+// 依 NVIDIA dgx-spark-playbooks 的 Model Support Matrix,且已逐一打 HF API 驗證 repo 存在
+const NV_NVFP4 = ["qwen36-35b", "qwen3-8b", "qwen3-14b", "qwen3-32b",
+                  "gemma4-31b", "nemotron3-super", "qwen36-27b", "deepseek-v4-flash"];
+NV_NVFP4.forEach(id => t(`${id} 可選 NVFP4`, ev(`fp4Ok(${JSON.stringify(id)},"nvfp4")`)));
+// 反例:NVIDIA 支援表對 Gemma 4 26B 只列 Base,HF 上該 NVFP4 repo 回 401
+t("gemma4-26b 不可選 NVFP4(官方無此 checkpoint)", !ev(`fp4Ok("gemma4-26b","nvfp4")`));
+t("gpt-oss 仍只支援 MXFP4",
+  ev(`fp4Ok("gptoss-120b","mxfp4") && !fp4Ok("gptoss-120b","nvfp4")`));
+
+console.log("\n== 16. DGX Spark agent 範本(NVIDIA playbook 配置)==");
+clickScn("agent");
+t("模型切為 Qwen3.6 35B-A3B", $("model").value === "qwen36-35b", $("model").value);
+t("權重精度為 NVFP4(未被 fp4Ok 靜默退回 FP8)",
+  ev("state.wprec") === "nvfp4", ev("state.wprec"));
+t("KV 精度為 FP8", ev("state.kvprec") === "fp8", ev("state.kvprec"));
+t("ctx = 262,144(--max-model-len)", ctxVal() === 262144, String(ctxVal()));
+t("並發 = 4(--max-num-seqs)", +$("users").value === 4, $("users").value);
+t("prefill chunk = 8192(--max-num-batched-tokens)", +$("chunk").value === 8192, $("chunk").value);
+t("套用範本不會把模型誤切為自訂", $("model").value !== "custom");
+t("只有 agent 範本 pressed", pressed().length === 1 && pressed()[0] === "agent", pressed().join(","));
+const agentTotal = snapRow("合計");
+const agentW = snapRow("模型權重");
+console.log(`   → 權重 ${agentW.toFixed(2)} GiB / 合計 ${agentTotal.toFixed(2)} GiB`);
+// NVIDIA 用 --gpu-memory-utilization 0.4;128 GiB 的 40% = 51.2 GiB
+t("合計落在 NVIDIA 的 40% 預算(51.2 GiB)內", agentTotal <= 51.2, agentTotal.toFixed(2));
+// 若 NVFP4 退回 FP16,權重會從約 18 GiB 變成約 65 GiB —— 這是最關鍵的回歸點
+t("權重約 18 GiB,證明走的是 NVFP4 而非 FP16",
+  agentW > 15 && agentW < 22, agentW.toFixed(2));
+const sparkFits = ev(`(() => {
+  const g = GPUS.find(x => x.name.includes("GB10"));
+  return lastSnapshot.gpus.find(r => r[0] === g.name);
+})()`);
+t("DGX Spark 單機可容(TP=1)", sparkFits && sparkFits[3] === 1, JSON.stringify(sparkFits));
+
+console.log("\n== 17. 其餘三個範本未受影響 ==");
+for (const [k, [c, u, f]] of Object.entries({ rag: [16384, 16, 8], human: [4096, 48, 10], doc: [131072, 4, 6] })) {
+  clickScn(k);
+  t(`範本 ${k} 仍為 ctx=${c} users=${u} frag=${f}`,
+    ctxVal() === c && +$("users").value === u && +$("frag").value === f,
+    `${ctxVal()}/${$("users").value}/${$("frag").value}`);
+}
+// 工作負載型範本不帶模型欄位,不該動到目前選的模型
+$("model").value = "glm52"; fire($("model"), "change");
+clickScn("rag");
+t("純工作負載範本不覆蓋模型", $("model").value === "glm52", $("model").value);
+
+console.log("\n== 18. 執行期無新錯誤 ==");
 t("全程無 console.error / jsdomError", errors.length === 0, errors.join(" | "));
 
 console.log(`\n結果: ${pass} 通過 / ${fail} 失敗\n`);
