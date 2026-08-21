@@ -108,6 +108,11 @@
   /* ~ 而非 +:DOM 上 .tipbtn 與 .tip 中間隔著 #fragv,不是緊鄰的下一個手足,
      用 + 這個選擇器永遠不會命中(踩過一次的坑) */
   .tipbtn:hover ~ .tip, .tipbtn:focus-visible ~ .tip, .tip:hover{display:block}
+  /* 錨點在容器底部時往上開,否則面板會掉到卡片外 */
+  .tip-up{top:auto; bottom:calc(100% + 8px)}
+  /* 刻意不做「透明橋接」讓游標能移進面板:面板錨在容器而非按鈕上,
+     橋接得橫跨整個 420px 寬度,開啟時會蓋住底下的動作按鈕與碎片化滑桿、擋掉點擊。
+     面板內是純文字且完整顯示,滑過按鈕讀完即可,不需要移進去。 */
   .tip-h{display:block; font-size:.72rem; color:var(--text); margin-bottom:8px}
   .tip-h2{margin-top:12px}
   .tip-scroll{overflow-x:auto}
@@ -115,6 +120,11 @@
   .tip th,.tip td{text-align:left; padding:5px 8px 5px 0; vertical-align:top; border-bottom:1px solid var(--border)}
   .tip thead th{color:var(--text-3); font-weight:500; white-space:nowrap}
   .tip tbody tr:last-child td{border-bottom:none}
+  .tip dl{margin:0}
+  .tip dt{font-weight:600; color:var(--text); margin-top:10px}
+  .tip dt:first-child{margin-top:0}
+  .tip dd{margin:2px 0 0}
+  .tip code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--text)}
   .tip ul{margin:6px 0 0; padding-left:1.1em}
   .tip li{margin-bottom:4px}
   .tip li:last-child{margin-bottom:0}
@@ -178,7 +188,7 @@
   .pill.warn{background:var(--warn-soft); color:var(--warn)}
   .pill.over{background:var(--over-soft); color:var(--over)}
 
-  .actions{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:16px; padding-top:14px; border-top:1px solid var(--border)}
+  .actions{position:relative; display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:16px; padding-top:14px; border-top:1px solid var(--border)}
   .act{
     font-family:inherit; font-size:.8rem; font-weight:500; color:var(--text-2); background:var(--surface-2);
     border:1px solid var(--border); border-radius:8px; padding:7px 12px; cursor:pointer;
@@ -336,7 +346,19 @@
           <button type="button" class="act" id="copyCsv">複製 CSV</button>
           <button type="button" class="act" id="copyCfg">複製設定碼</button>
           <button type="button" class="act" id="loadCfg">載入設定碼</button>
+          <button type="button" class="tipbtn" aria-label="這三個按鈕做什麼?顯示說明" aria-describedby="actTip">i</button>
           <span class="act-msg" id="actMsg" role="status"></span>
+          <div class="tip tip-up" id="actTip" role="tooltip">
+            <strong class="tip-h">這三個按鈕做什麼</strong>
+            <dl>
+              <dt>複製 CSV</dt>
+              <dd>把「估算結果」的數據表(模型權重、KV Cache、合計等)複製成試算表格式,可貼進 Excel 或 Google Sheets 繼續分析。</dd>
+              <dt>複製設定碼</dt>
+              <dd>把目前所有設定(模型、精度、上下文、各項參數)壓成一段短字串。傳給同事,對方貼進「載入設定碼」就能看到跟你一樣的完整結果。</dd>
+              <dt>載入設定碼</dt>
+              <dd>貼上別人給的、或自己先前存下的設定碼,一鍵還原整組設定。網址列用 <code>#cfg=…</code> 也能直接帶設定碼,開啟頁面自動還原。</dd>
+            </dl>
+          </div>
         </div>
       </div>
     </div>
