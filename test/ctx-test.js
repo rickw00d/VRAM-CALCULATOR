@@ -44,9 +44,16 @@ console.log("\n== 2. 選單結構 ==");
 const sel = $("ctx");
 const groups = [...sel.querySelectorAll("optgroup")].map(g => g.label);
 t("select 取代 number input", sel.tagName === "SELECT");
-t("5 個 optgroup", groups.length === 5, groups.join(","));
+t("6 個 optgroup", groups.length === 6, groups.join(","));
 t("分組順序正確",
-  groups.join("|") === "對話 / 助理|檢索 / 知識問答|Agent / 工具呼叫|長文件處理|程式開發", groups.join("|"));
+  groups.join("|") === "對話 / 助理|檢索 / 知識問答|Agent 最低需求|Agent 實機配方|長文件處理|程式開發",
+  groups.join("|"));
+// 兩個 Agent 分組必須相鄰:buildCtxList 依 g 值變化切 optgroup,
+// 中間若插入別組,同名分組會被切成兩塊
+t("兩個 Agent 分組相鄰",
+  groups.indexOf("Agent 實機配方") - groups.indexOf("Agent 最低需求") === 1, groups.join(","));
+t("硬門檻與實機配方分屬不同組(不混為同一種東西)",
+  ev(`CTX_OPTIONS.find(o=>o.id==="agent-64k").g`) !== ev(`CTX_OPTIONS.find(o=>o.id==="agent-256k").g`));
 // 從 CTX_OPTIONS 推導而非寫死數字,新增選項時不必改測試
 const optCount = ev("CTX_OPTIONS.length");
 t(`${optCount} 選項 + 自訂 = ${optCount + 1}`, sel.options.length === optCount + 1,
