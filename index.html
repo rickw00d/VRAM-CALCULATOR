@@ -991,6 +991,27 @@ $("themeBtn").onclick = () => {
 mqDark.addEventListener("change", syncThemeBtn);
 syncThemeBtn();
 
+/* 說明面板的開啟方向依剩餘空間決定。面板高度固定,但按鈕在畫面上的位置隨捲動而變:
+   按鈕落在下半部時若仍往下開,會有一截在畫面外 —— 而此時想捲動就會離開按鈕、
+   面板隨即收起,那一截永遠讀不到。.tip-up 在 HTML 裡只是預設值,這裡會覆寫。 */
+document.querySelectorAll(".tipbtn").forEach(btn => {
+  const tip = btn.parentElement.querySelector(".tip");
+  if (!tip) return;
+  const place = () => {
+    // 此刻面板可能還是 display:none,offsetHeight 會是 0;先借顯示量完再還原
+    const hidden = getComputedStyle(tip).display === "none";
+    if (hidden){ tip.style.visibility = "hidden"; tip.style.display = "block"; }
+    const h = tip.offsetHeight;
+    if (hidden){ tip.style.display = ""; tip.style.visibility = ""; }
+    const r = btn.getBoundingClientRect();
+    const below = innerHeight - r.bottom - 12, above = r.top - 12;
+    // 下方放得下就維持往下開;放不下、且上方確實比較寬裕時才翻上去
+    tip.classList.toggle("tip-up", below < h && above > below);
+  };
+  btn.addEventListener("mouseenter", place);
+  btn.addEventListener("focus", place);
+});
+
 calc();
 // 獨立網址使用時,#cfg=... 可直接還原情境(Artifact 內請改用「載入設定碼」)
 if (location.hash.startsWith("#cfg=")) cfgApply(location.hash.slice(5));

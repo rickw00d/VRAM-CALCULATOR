@@ -4,9 +4,12 @@
   "private": true,
   "description": "LLM 推論 VRAM 記憶體估算器 — 單檔靜態頁面,package.json 僅供迴歸測試使用",
   "scripts": {
-    "test": "node test/ctx-test.js"
+    "test": "node test/ctx-test.js",
+    "test:visual": "node test/visual.js",
+    "test:all": "npm test && npm run test:visual"
   },
   "devDependencies": {
-    "jsdom": "^30.0.1"
+    "jsdom": "^30.0.1",
+    "playwright-core": "^1.62.1"
   }
 }
