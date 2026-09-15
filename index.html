@@ -279,7 +279,7 @@
           </div>
           <div class="field">
             <label for="users" data-i18n-html="in.users">同時並發用戶 <span class="hint">(batch)</span></label>
-            <input type="number" id="users" min="1" max="10000" step="1" value="16">
+            <input type="number" id="users" min="1" max="10000" step="1" value="4">
           </div>
         </div>
 
@@ -1465,7 +1465,9 @@ const FRAMEWORK_GIB = 1.2;   // CUDA context + 框架常駐,每張卡都要
 const ACT_FACTOR = 8;        // prefill 期間層間工作緩衝倍率
 const GiB = 1024 ** 3;
 
-const state = {wprec:"fp16", kvprec:"fp16"};
+// KV 預設 FP8:實務上 KV 量化到 FP8 幾乎不損品質,卻能省近一半 KV,
+// 是目前部署的常態。預設就該反映常態,而非理論上的無損值。
+const state = {wprec:"fp16", kvprec:"fp8"};
 let lastSnapshot = null;
 const $ = id => document.getElementById(id);
 const fmt = n => n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
