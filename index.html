@@ -439,8 +439,13 @@
    因此可以只翻一部分,未翻的部分不會變成空白或裸 key。
    模型/GPU/上下文選項的文案留在各自的資料陣列裡當 zh-TW 原文,
    其他語系用 `m.<id>.t` 這類 key 覆寫,如此資料陣列完全不必改動。 */
+/* 語言名稱一律用該語言自己的寫法(endonym):德文使用者要在選單裡看到
+   "Deutsch" 而不是 "German"。font 是該語系的漢字字型 —— TC/SC/JP 的
+   共用漢字字形不同(直/骨/steps 等),套錯會讓讀者覺得彆扭。 */
 const LOCALES = [
   {id:"zh-TW", name:"繁體中文", font:'"Noto Sans TC"'},
+  {id:"zh-CN", name:"简体中文", font:'"Noto Sans SC"'},
+  {id:"ja",    name:"日本語",   font:'"Noto Sans JP"'},
   {id:"en",    name:"English",  font:""},
 ];
 
@@ -592,10 +597,433 @@ const DICT = {
     劃掉的格式表示該模型目前無公開權重,不可選;NVFP4 另需 Blackwell 世代硬體才有原生加速。`,
 },
 
-/* 英文:P1 完成 UI 骨架(標籤、按鈕、表頭、動態訊息)。
-   長篇技術論述(tip.frag / tip.act / foot / arch.foot 與模型的 t/q 欄位)
-   刻意留白讓它回退到繁中 —— 那是 P2 的翻譯工作,需要領域知識而非機械對譯。
-   用 i18nCoverage() 可列出還缺哪些 key。 */
+/* 簡體中文。**不是繁轉簡** —— 術語體系不同,直接用 OpenCC 轉換會產出
+   「簡體字寫的台灣術語」,大陸讀者一眼看出不對。關鍵對照:
+   記憶體→显存(GPU)/内存(系統)、快取→缓存、預設→默认、範本→模板、
+   助理→助手、餘裕→余量、設定→设置、數位人→数字人、文件→文档、
+   **啟動值→激活值**(這是 ML 術語,不是一般詞彙轉換)。 */
+"zh-CN": {
+  "head.docTitle":"显存估算器",
+  "head.eyebrow":"AI 部署容量规划",
+  "head.title":"LLM 推理显存估算器",
+  "head.sub":"输入模型与工作负载条件,实时估算 GPU 显存需求,并比对加速卡落点。已计入 GQA/MLA 分片限制与统一内存的系统预留。",
+
+  "scn.rag.t":"企业 RAG / 知识问答",
+  "scn.rag.d":"长上下文检索、中等并发。对应 AI-Q / Enterprise RAG 类 Blueprint。",
+  "scn.human.t":"数字人 / 客服对话",
+  "scn.human.d":"实时低延迟、较高并发、中等上下文。对应 Digital Human 类 Blueprint。",
+  "scn.doc.t":"长文档处理 / 摘要",
+  "scn.doc.d":"超长上下文、低并发批处理。对应 PDF-to-Podcast / 文档抽取类 Blueprint。",
+  "scn.agent.t":"OpenClaw / Hermes Agent",
+  "scn.agent.d":"两者共用同一组配置。依 NVIDIA DGX Spark playbook 的 agent-ready recipe:Qwen3.6 35B NVFP4 + FP8 KV、256K 上下文、并发 4。",
+
+  "in.title":"输入条件",
+  "in.model":'LLM 模型 <span class="hint">(2025/08 gpt-oss 起的开源权重模型)</span>',
+  "in.showOld":"显示旧一代模型(对照用)",
+  "in.wprec":'权重精度 / 量化格式 <span class="hint">(Data Format)</span>',
+  "in.ctx":'上下文长度 <span class="hint">(tokens)</span>',
+  "in.ctxCustomAria":"自定义上下文长度 (tokens)",
+  "in.users":'并发用户数 <span class="hint">(batch)</span>',
+  "in.kvprec":'KV Cache 精度 <span class="hint">(可与权重不同)</span>',
+  "in.frag":'碎片化 / 预留余量 <span class="hint">(PagedAttention 块对齐、分配器碎片)</span>',
+  "in.fragTipAria":"碎片化余量怎么设?显示说明",
+  "in.rate":'电价 <span class="hint">(每 kWh)</span>',
+  "in.util":'平均负载率 <span class="hint">(%)</span>',
+
+  "arch.summary":"模型架构参数(进阶,可修改;默认为公开规格参考值)",
+  "arch.params":"参数量 (B)", "arch.layers":"总层数 L", "arch.hidden":"hidden",
+  "arch.lfull":"全注意力层", "arch.lfullT":"KV 随上下文线性增长的层",
+  "arch.lswa":"滑窗层",     "arch.lswaT":"KV 有上限的滑动窗口层",
+  "arch.win":"窗口大小",    "arch.winT":"滑动窗口大小 (tokens)",
+  "arch.kvheads":"KV heads", "arch.headdim":"head dim",
+  "arch.latent":"MLA latent", "arch.latentT":"DeepSeek 类 MLA 压缩 KV 维度;>0 时改用 MLA 公式",
+  "arch.vocab":"词表大小 vocab", "arch.chunk":"prefill chunk",
+  "arch.chunkT":"prefill 分块大小,决定激活值峰值",
+  "arch.current":"当前:",
+
+  "act.copyCsv":"复制 CSV", "act.copyCfg":"复制配置码", "act.loadCfg":"加载配置码",
+  "act.tipAria":"这三个按钮做什么?显示说明",
+
+  "res.title":"估算结果",
+  "res.capInit":"单卡所需总显存",
+  "res.legendOh":"框架 + 余量",
+  "res.gpuTitle":"GPU 落点比对",
+  "res.recTitle":"推荐配置 · 运营估算",
+  "mem.unified":"统一内存",
+
+  "gpu.th.card":"加速卡", "gpu.th.usable":"可用", "gpu.th.tp":"张量并行",
+  "gpu.th.cost":"年电费", "gpu.th.status":"状态",
+  "gpu.single":"单卡可容纳",
+  "gpu.multi": n => `${n}× 并行`,
+  "gpu.over":  maxN => `超出 ${maxN}× 上限`,
+
+  "bd.weight":"模型权重", "bd.act":"激活值", "bd.oh":"框架常驻 + 余量", "bd.total":"合计",
+  "bd.qoh":    pct => `(含 ${pct}% 量化开销)`,
+  "bd.kvSub":  (users, ctx, cap) => `(${users} 并发 × ${ctx} ctx${cap ? ` · 滑窗封顶 ${cap}` : ""})`,
+  "bd.actSub": chunk => `(chunk ${chunk})`,
+  "bd.ohSub":  pct => `(${pct}% 碎片化)`,
+
+  "res.cap": (path, Lf, Lsw, lin) => `单卡(TP=1)所需总显存 · ${path} 路径 · KV 层 ${Lf} 全注意力`
+    + (Lsw ? ` + ${Lsw} 滑窗` : "") + (lin ? ` + ${lin} 线性层不计` : ""),
+  "res.perUser": v => `每用户 KV ≈ ${v} GiB`,
+
+  "note.single": (name, usable) => `最小可单卡容纳的是 <strong>${name}</strong>(可用 ${usable} GiB)。`,
+  "note.multi":  (n, name) => `无单卡方案;最小可行为 <strong>${n}× ${name}</strong>。`,
+  "note.none":"清单中没有任何配置能容纳,请降低精度、并发或上下文。",
+  "note.mla":"该模型走 MLA,KV Cache 在张量并行下<strong>各卡复制而不递减</strong>,加卡只摊薄权重。要压 KV 请降并发或上下文。",
+  "note.kvHigh": pct => `KV Cache 占比偏高(${pct}%),改用 <code>FP8</code> KV 可省近一半。`,
+  "note.weightDom":"权重是主要开销,降低权重精度(FP8 / INT4)最有效。",
+
+  "rec.config":"配置", "rec.perCard":"每卡占用", "rec.headroom":"余量",
+  "rec.peakW":"峰值功耗", "rec.kwh":"年耗电", "rec.cost":"年电费",
+  "rec.none":"暂无可行配置,故不估算功耗与电费。",
+
+  "warn.prefix":"⚠ ", "warn.join":"；",
+  "warn.layerConflict": (sum, L) => `全注意力层 + 滑窗层(${sum})超过总层数 L(${L}),层数设置互相矛盾`,
+  "warn.swNoWin": Lsw => `已设置 ${Lsw} 个滑窗层,但窗口大小为 0 → 这些层的 KV 会被当成 0,可能不是你要的结果`,
+
+  "msg.custom":"自定义",
+  "msg.unconfirmed":"⚠ 未确认:",
+  "msg.srcFrom":"规格来源:",
+  "msg.srcNone":"规格来源:无官方公开权重,架构为推估值",
+  "msg.noWeights": label => `该模型没有公开的 ${label} 权重`,
+  "msg.copyFail":"复制失败,请手动选取",
+  "msg.csvCopied":"CSV 已复制到剪贴板",
+  "msg.cfgCopied":"配置码已复制",
+  "msg.cfgLoaded":"配置已加载",
+  "msg.cfgBad":"配置码无法解析",
+  "msg.paste":"粘贴配置码后按 Enter",
+
+  "csv.item":"项目", "csv.value":"值", "csv.model":"模型", "csv.wprec":"权重精度",
+  "csv.kvprec":"KV 精度", "csv.ctx":"上下文", "csv.users":"并发",
+  "csv.memItem":"显存项目", "csv.infeasible":"不可行",
+
+  "ctx.custom":"自定义…",
+  "lang.aria":"语言",
+  "m.custom.name":"— 自定义 (Custom) —",
+  "theme.dark":"深色", "theme.light":"浅色",
+  "theme.aria": to => `切换到${to}主题`,
+
+  "grp.A":"64GB 本地级", "grp.B":"128GB 级", "grp.C":"数据中心级",
+  "grp.old":"旧一代(对照用)",
+
+  "ctx.g.對話 / 助理":"对话 / 助手",
+  "ctx.g.檢索 / 知識問答":"检索 / 知识问答",
+  "ctx.g.Agent 最低需求":"Agent 最低需求",
+  "ctx.g.Agent 實機配方":"Agent 实机配方",
+  "ctx.g.長文件處理":"长文档处理",
+  "ctx.g.程式開發":"软件开发",
+
+  "ctx.t.chat-2k":"2K — 单轮问答 · 表单填写",
+  "ctx.t.chat-4k":"4K — 数字人 · 实时客服对话",
+  "ctx.t.chat-8k":"8K — 一般对话助手",
+  "ctx.t.rag-16k":"16K — 企业 RAG 单次检索",
+  "ctx.t.rag-32k":"32K — RAG + 多轮对话历史",
+  "ctx.t.agent-32k":"32K — OpenClaw",
+  "ctx.t.agent-64k":"64K — Hermes Agent",
+  "ctx.t.agent-128k":"128K — 长时会话 · 多工具链",
+  "ctx.t.agent-256k":"256K — DGX Spark(NVIDIA 官方 playbook)",
+  "ctx.t.doc-128k":"128K — 长文档 · 合同全文摘要",
+  "ctx.t.doc-256k":"256K — 多文档比对 · 超长报告",
+  "ctx.t.code-128k":"128K — 单个功能模块开发",
+  "ctx.t.code-256k":"256K — 跨文件重构 · 大型 repo 导览",
+  "ctx.t.code-1m":"1M — 整个代码库级",
+
+  "g.RTX Spark (N1x).tag":"统一内存 · 最高 128 GiB",
+  "g.Jetson AGX Thor.tag":"统一内存",
+  "g.EdgeXpert / DGX Spark (GB10).tag":"统一内存",
+
+  "m.custom.t":"自定义",
+  "m.gptoss-20b.t":"MoE · GQA + 带状稀疏 | 3.6B active",
+  "m.gptoss-120b.t":"MoE · GQA + 带状稀疏 | 5.1B active",
+  "m.qwen36-27b.t":"Dense · 48×DeltaNet + 16×GQA",
+  "m.qwen38-27b.t":"Dense · 48×DeltaNet + 16×GQA",
+  "m.qwen36-35b.t":"MoE · 30×DeltaNet + 10×GQA | 3B active",
+  "m.qwen35-397b.t":"MoE · 45×DeltaNet + 15×GQA | 17B active",
+  "m.nemotron35-light.t":"MoE · 24×Mamba-2 + 6×注意力 + 22×MoE | 3.6B active",
+  "m.nemotron3-super.t":"MoE · 44×Mamba-2 + 22×注意力 + 22×MoE | 12B active",
+  "m.glimmer-30b.t":"Dense · 39×局部(w2048) + 13×全局",
+  "m.gemma4-26b.t":"MoE · 26×滑窗(w1024) + 4×全局 | 4B active",
+  "m.gemma4-31b.t":"Dense · 50×滑窗(w1024) + 10×全局",
+  "m.deepseek-v4-flash.t":"MoE · MLA + DSA | 13B active",
+  "m.deepseek-v4-pro.t":"MoE · MLA + DSA | 49B active",
+  "m.glm52.t":"MoE · MLA + DSA | 40B active",
+  "m.minimax-m25.t":"MoE · 纯 GQA(全层全注意力) | 10B active",
+  "m.kimi-k26.t":"MoE · MLA(全层) | 32B active",
+  "m.kimi-k3.t":"MoE · 69×KDA + 25×Gated MLA | 104B active",
+  "m.qwen38-max.t":"MoE · 69×线性 + 23×全注意力 | 95B active",
+  "m.qwen3-8b.t":"Dense · GQA(全层全注意力)",
+  "m.qwen3-14b.t":"Dense · GQA(全层全注意力)",
+  "m.qwen3-32b.t":"Dense · GQA(全层全注意力)",
+  "m.qwen3-30b-a3b.t":"MoE · GQA | 3B active",
+  "m.qwen3-235b.t":"MoE · GQA | 22B active",
+  "m.llama4-scout.t":"MoE · GQA | 17B active",
+  "m.llama4-mav.t":"MoE · GQA | 17B active",
+  "m.glm46.t":"MoE · GQA | 32B active",
+  "m.deepseek-v31.t":"MoE · MLA | 37B active",
+  "m.deepseek-v32.t":"MoE · MLA | 37B active",
+
+  "m.gemma4-31b.q":"config 读出的全注意力层数为 8 或 10 不一致,取较保守的 10;全局层 global_head_dim 为 512,此处按 256 计",
+  "m.deepseek-v4-flash.q":"config 没有层型数组,按全部 43 层保守估算;官方称 DSA 稀疏注意力在 1M ctx 下可再降到约 V3.2 的 10%",
+  "m.deepseek-v4-pro.q":"config 没有层型数组,按全部 61 层保守估算",
+  "m.qwen38-max.q":"无官方公开权重(HF 上只有第三方蒸馏/量化版),架构全为推估;hidden 与 KV heads 未确认",
+
+  "arch.foot":`<strong>总层数 ≠ 有 KV 的层数。</strong>线性注意力层(Mamba / DeltaNet)状态固定,不计入 KV;滑窗层的 KV 上限为窗口大小。
+            MoE 权重按「总参数量」计(全部专家常驻);<code>MLA latent</code> &gt; 0 时走压缩路径(不 ×2)。`,
+
+  "tip.frag":`<strong class="tip-h">三个模板为什么给不同的余量</strong>
+              <div class="tip-scroll">
+                <table>
+                  <thead><tr><th>模板</th><th>并发</th><th>上下文</th><th>余量</th><th>为什么</th></tr></thead>
+                  <tbody>
+                    <tr><td>数字人／客服</td><td>48</td><td>4K</td><td><b>10%</b></td><td>序列多又短,每条都要付一次块尾巴的代价,浪费占比最高</td></tr>
+                    <tr><td>企业 RAG</td><td>16</td><td>16K</td><td><b>8%</b></td><td>中间值</td></tr>
+                    <tr><td>长文档处理</td><td>4</td><td>128K</td><td><b>6%</b></td><td>序列少又长,尾巴浪费被超长序列摊平,占比最低</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <strong class="tip-h tip-h2">自己调的话</strong>
+              <ul>
+                <li><b>0%</b> —— 理论下限,只在你想知道「绝对最少要多少」时用,别拿来做采购决策</li>
+                <li><b>8%</b> —— 一般 vLLM 稳态</li>
+                <li><b>15–25%</b> —— 长时间运行的服务、负载波动大、频繁切换 LoRA</li>
+              </ul>`,
+
+  "tip.act":`<strong class="tip-h">这三个按钮做什么</strong>
+            <dl>
+              <dt>复制 CSV</dt>
+              <dd>把「估算结果」的数据表(模型权重、KV Cache、合计等)复制成表格格式,可粘贴进 Excel 或 Google Sheets 继续分析。</dd>
+              <dt>复制配置码</dt>
+              <dd>把当前所有设置(模型、精度、上下文、各项参数)压成一段短字符串。发给同事,对方粘贴进「加载配置码」就能看到跟你一样的完整结果。</dd>
+              <dt>加载配置码</dt>
+              <dd>粘贴别人给的、或自己之前存下的配置码,一键还原整组设置。地址栏用 <code>#cfg=…</code> 也能直接带配置码,打开页面自动还原。</dd>
+            </dl>`,
+
+  "foot":`<strong>计算模型</strong>:总量 = (权重 + KV Cache + 激活值) ÷ 并行数 + 框架常驻,再乘上碎片化余量。<br>
+    权重 = 总参数量 × 每参数字节数(MoE 含全部专家;INT4/INT8/FP8 另计分组量化的 scales 开销)。<br>
+    <strong>KV Cache 按层型分开计算</strong>:<code>2 × KVheads × headdim × 字节数 × (全注意力层 × 上下文 + 滑窗层 × min(上下文, 窗口)) × 并发</code>。
+    线性注意力层(Mamba / Gated DeltaNet / KDA)状态固定、不随上下文增长,不计入。MLA 走压缩路径 <code>latent × …</code>(不 ×2)。
+    <strong>总层数 ≠ 有 KV 的层数</strong>——2026 年的新模型多为混合架构,直接用总层数会高估数倍。<br>
+    <strong>张量并行(TP)</strong>取 2 的幂。GQA 的 KV 最多切到 <code>KV heads</code> 份;<strong>MLA 的 KV 在各卡复制、不随 TP 递减</strong>——这是 DeepSeek 类模型常被低估之处。<br>
+    数值以 GiB(2³⁰ bytes)计。<strong>加速卡标称的「96GB」等容量本身即为 2³⁰ 进制</strong>——显存以 2 的幂次颗粒组成,nvidia-smi 对「80GB」H100 报告 81,920 MiB(= 80 GiB),故本表一律以 GiB 标示,未做十进制换算。统一内存机型(EdgeXpert/DGX Spark (GB10)、Jetson Thor、RTX Spark (N1x))已扣除 OS/CPU 预留。实际占用仍会因 vLLM / TensorRT-LLM 的分配策略而异,结果为工程估算而非保证值。模型架构为公开规格参考值,请以官方 config 为准。<br>
+    <strong>电费</strong>= TDP × 负载率 × 8760 小时 × 电价,仅计加速器本身,未含主机、散热与 PUE。TDP 为典型板卡功耗参考值(统一内存机型为整机),实际依 SKU 与散热设置而异。<br>
+    <strong>4-bit 块浮点</strong>:NVFP4 为每 16 个元素共用一个 FP8(E4M3)缩放因子(+12.5%),MXFP4 为每 32 个共用一个 E8M0 缩放因子(+6.25%),故两者实际占用不同于纯 INT4。
+    划掉的格式表示该模型目前没有公开权重,不可选;NVFP4 另需 Blackwell 世代硬件才有原生加速。`,
+},
+
+/* 日本語。ML 術語多為片假名外來語(アテンション / アクティベーション /
+   エキスパート),與中文的漢字術語體系差異很大,不可照漢字直譯。
+   字型必須切 Noto Sans JP:共用漢字的字形與 TC/SC 不同。 */
+"ja": {
+  "head.docTitle":"VRAM 計算ツール",
+  "head.eyebrow":"AI デプロイ容量プランニング",
+  "head.title":"LLM 推論 VRAM 計算ツール",
+  "head.sub":"モデルとワークロードの条件を入力すると、必要な GPU メモリをリアルタイムに見積もり、アクセラレータごとの収まり具合を比較します。GQA/MLA のシャーディング制約と統合メモリのシステム予約を考慮済みです。",
+
+  "scn.rag.t":"エンタープライズ RAG / ナレッジ QA",
+  "scn.rag.d":"長いコンテキストの検索、中程度の同時実行。AI-Q / Enterprise RAG 系の Blueprint に相当。",
+  "scn.human.t":"デジタルヒューマン / サポートチャット",
+  "scn.human.d":"低レイテンシ、高めの同時実行、中程度のコンテキスト。Digital Human 系の Blueprint に相当。",
+  "scn.doc.t":"長文ドキュメント処理 / 要約",
+  "scn.doc.d":"超長コンテキスト、低同時実行のバッチ処理。PDF-to-Podcast / 文書抽出系の Blueprint に相当。",
+  "scn.agent.t":"OpenClaw / Hermes Agent",
+  "scn.agent.d":"両者は同じ構成を共有します。NVIDIA DGX Spark playbook の agent-ready recipe に準拠:Qwen3.6 35B NVFP4 + FP8 KV、256K コンテキスト、同時実行 4。",
+
+  "in.title":"入力条件",
+  "in.model":'LLM モデル <span class="hint">(2025/08 の gpt-oss 以降のオープンウェイトモデル)</span>',
+  "in.showOld":"旧世代モデルを表示(比較用)",
+  "in.wprec":'重み精度 / 量子化フォーマット <span class="hint">(Data Format)</span>',
+  "in.ctx":'コンテキスト長 <span class="hint">(tokens)</span>',
+  "in.ctxCustomAria":"カスタムのコンテキスト長 (tokens)",
+  "in.users":'同時実行ユーザー数 <span class="hint">(batch)</span>',
+  "in.kvprec":'KV キャッシュ精度 <span class="hint">(重みと別に設定可)</span>',
+  "in.frag":'断片化 / 予備領域 <span class="hint">(PagedAttention のブロック整列、アロケータの断片化)</span>',
+  "in.fragTipAria":"予備領域はどう設定する?説明を表示",
+  "in.rate":'電力単価 <span class="hint">(kWh あたり)</span>',
+  "in.util":'平均稼働率 <span class="hint">(%)</span>',
+
+  "arch.summary":"モデルアーキテクチャ(詳細設定・編集可。初期値は公開スペックの参考値)",
+  "arch.params":"パラメータ数 (B)", "arch.layers":"総レイヤー数 L", "arch.hidden":"hidden",
+  "arch.lfull":"フルアテンション層", "arch.lfullT":"KV がコンテキストに比例して増える層",
+  "arch.lswa":"スライディング層",   "arch.lswaT":"KV に上限があるスライディングウィンドウ層",
+  "arch.win":"ウィンドウ幅",        "arch.winT":"スライディングウィンドウのサイズ (tokens)",
+  "arch.kvheads":"KV heads", "arch.headdim":"head dim",
+  "arch.latent":"MLA latent", "arch.latentT":"DeepSeek 系 MLA の圧縮 KV 次元。>0 で MLA の式に切り替わります",
+  "arch.vocab":"語彙サイズ vocab", "arch.chunk":"prefill chunk",
+  "arch.chunkT":"prefill のチャンクサイズ。アクティベーションのピークを決めます",
+  "arch.current":"現在:",
+
+  "act.copyCsv":"CSV をコピー", "act.copyCfg":"設定コードをコピー", "act.loadCfg":"設定コードを読み込む",
+  "act.tipAria":"この 3 つのボタンは何をする?説明を表示",
+
+  "res.title":"見積もり結果",
+  "res.capInit":"GPU 1 枚あたりに必要な総メモリ",
+  "res.legendOh":"フレームワーク + 予備",
+  "res.gpuTitle":"アクセラレータ適合状況",
+  "res.recTitle":"推奨構成 · ランニングコスト",
+  "mem.unified":"統合メモリ",
+
+  "gpu.th.card":"アクセラレータ", "gpu.th.usable":"使用可能", "gpu.th.tp":"テンソル並列",
+  "gpu.th.cost":"年間電気代", "gpu.th.status":"判定",
+  "gpu.single":"1 枚に収まる",
+  "gpu.multi": n => `${n}× 並列`,
+  "gpu.over":  maxN => `${maxN}× の上限を超過`,
+
+  "bd.weight":"モデルの重み", "bd.act":"アクティベーション", "bd.oh":"フレームワーク常駐 + 予備", "bd.total":"合計",
+  "bd.qoh":    pct => `(量子化オーバーヘッド ${pct}% を含む)`,
+  "bd.kvSub":  (users, ctx, cap) => `(同時実行 ${users} × ${ctx} ctx${cap ? ` · ウィンドウ上限 ${cap}` : ""})`,
+  "bd.actSub": chunk => `(chunk ${chunk})`,
+  "bd.ohSub":  pct => `(断片化 ${pct}%)`,
+
+  "res.cap": (path, Lf, Lsw, lin) => `GPU 1 枚 (TP=1) の総メモリ · ${path} 経路 · KV 保持層 ${Lf} フルアテンション`
+    + (Lsw ? ` + ${Lsw} スライディング` : "") + (lin ? ` + 線形 ${lin} 層は対象外` : ""),
+  "res.perUser": v => `ユーザーあたり KV ≈ ${v} GiB`,
+
+  "note.single": (name, usable) => `1 枚で収まる最小構成は <strong>${name}</strong>(使用可能 ${usable} GiB)。`,
+  "note.multi":  (n, name) => `1 枚では収まりません。最小構成は <strong>${n}× ${name}</strong>。`,
+  "note.none":"リスト内のどの構成にも収まりません。精度・同時実行数・コンテキスト長を下げてください。",
+  "note.mla":"このモデルは MLA を使うため、KV キャッシュはテンソル並列でも<strong>各 GPU に複製され、減りません</strong>。枚数を増やしても薄まるのは重みだけです。KV を減らすには同時実行数かコンテキスト長を下げてください。",
+  "note.kvHigh": pct => `KV キャッシュの比率が高めです(${pct}%)。<code>FP8</code> KV に切り替えるとほぼ半減します。`,
+  "note.weightDom":"重みが支配的です。重み精度を下げる(FP8 / INT4)のが最も効果的です。",
+
+  "rec.config":"構成", "rec.perCard":"GPU 1 枚あたり", "rec.headroom":"余裕",
+  "rec.peakW":"ピーク消費電力", "rec.kwh":"年間消費電力量", "rec.cost":"年間電気代",
+  "rec.none":"収まる構成がないため、消費電力と電気代は算出しません。",
+
+  "warn.prefix":"⚠ ", "warn.join":"、",
+  "warn.layerConflict": (sum, L) => `フルアテンション層 + スライディング層(${sum})が総レイヤー数 L(${L})を超えています。層数の設定が矛盾しています`,
+  "warn.swNoWin": Lsw => `スライディング層を ${Lsw} 層に設定していますが、ウィンドウ幅が 0 です → これらの層の KV は 0 として扱われます。意図した結果ではない可能性があります`,
+
+  "msg.custom":"カスタム",
+  "msg.unconfirmed":"⚠ 未確認:",
+  "msg.srcFrom":"仕様ソース:",
+  "msg.srcNone":"仕様ソース:公式の公開ウェイトがないため、アーキテクチャは推定値です",
+  "msg.noWeights": label => `このモデルには公開された ${label} のウェイトがありません`,
+  "msg.copyFail":"コピーに失敗しました。手動で選択してください",
+  "msg.csvCopied":"CSV をクリップボードにコピーしました",
+  "msg.cfgCopied":"設定コードをコピーしました",
+  "msg.cfgLoaded":"設定を読み込みました",
+  "msg.cfgBad":"設定コードを解析できませんでした",
+  "msg.paste":"設定コードを貼り付けて Enter",
+
+  "csv.item":"項目", "csv.value":"値", "csv.model":"モデル", "csv.wprec":"重み精度",
+  "csv.kvprec":"KV 精度", "csv.ctx":"コンテキスト", "csv.users":"同時実行数",
+  "csv.memItem":"メモリ内訳", "csv.infeasible":"不可",
+
+  "ctx.custom":"カスタム…",
+  "lang.aria":"言語",
+  "m.custom.name":"— カスタム —",
+  "theme.dark":"ダーク", "theme.light":"ライト",
+  "theme.aria": to => `${to}テーマに切り替え`,
+
+  "grp.A":"64GB ローカル", "grp.B":"128GB クラス", "grp.C":"データセンター",
+  "grp.old":"旧世代(比較用)",
+
+  "ctx.g.對話 / 助理":"チャット / アシスタント",
+  "ctx.g.檢索 / 知識問答":"検索 / ナレッジ QA",
+  "ctx.g.Agent 最低需求":"エージェント — 最低要件",
+  "ctx.g.Agent 實機配方":"エージェント — 実機構成",
+  "ctx.g.長文件處理":"長文ドキュメント",
+  "ctx.g.程式開發":"ソフトウェア開発",
+
+  "ctx.t.chat-2k":"2K — 単発の QA · フォーム入力",
+  "ctx.t.chat-4k":"4K — デジタルヒューマン · リアルタイム対応",
+  "ctx.t.chat-8k":"8K — 一般的なチャットアシスタント",
+  "ctx.t.rag-16k":"16K — エンタープライズ RAG の単発検索",
+  "ctx.t.rag-32k":"32K — RAG + 複数ターンの履歴",
+  "ctx.t.agent-32k":"32K — OpenClaw",
+  "ctx.t.agent-64k":"64K — Hermes Agent",
+  "ctx.t.agent-128k":"128K — 長時間セッション · 複数ツール連携",
+  "ctx.t.agent-256k":"256K — DGX Spark(NVIDIA 公式 playbook)",
+  "ctx.t.doc-128k":"128K — 長文ドキュメント · 契約書全文の要約",
+  "ctx.t.doc-256k":"256K — 複数文書の比較 · 超長文レポート",
+  "ctx.t.code-128k":"128K — 単一機能モジュールの開発",
+  "ctx.t.code-256k":"256K — ファイル横断のリファクタ · 大規模 repo の把握",
+  "ctx.t.code-1m":"1M — コードベース全体",
+
+  "g.RTX Spark (N1x).tag":"統合メモリ · 最大 128 GiB",
+  "g.Jetson AGX Thor.tag":"統合メモリ",
+  "g.EdgeXpert / DGX Spark (GB10).tag":"統合メモリ",
+
+  "m.custom.t":"カスタム",
+  "m.gptoss-20b.t":"MoE · GQA + バンドスパース | 3.6B active",
+  "m.gptoss-120b.t":"MoE · GQA + バンドスパース | 5.1B active",
+  "m.qwen36-27b.t":"Dense · 48×DeltaNet + 16×GQA",
+  "m.qwen38-27b.t":"Dense · 48×DeltaNet + 16×GQA",
+  "m.qwen36-35b.t":"MoE · 30×DeltaNet + 10×GQA | 3B active",
+  "m.qwen35-397b.t":"MoE · 45×DeltaNet + 15×GQA | 17B active",
+  "m.nemotron35-light.t":"MoE · 24×Mamba-2 + 6×アテンション + 22×MoE | 3.6B active",
+  "m.nemotron3-super.t":"MoE · 44×Mamba-2 + 22×アテンション + 22×MoE | 12B active",
+  "m.glimmer-30b.t":"Dense · 39×ローカル (w2048) + 13×グローバル",
+  "m.gemma4-26b.t":"MoE · 26×スライディング (w1024) + 4×グローバル | 4B active",
+  "m.gemma4-31b.t":"Dense · 50×スライディング (w1024) + 10×グローバル",
+  "m.deepseek-v4-flash.t":"MoE · MLA + DSA | 13B active",
+  "m.deepseek-v4-pro.t":"MoE · MLA + DSA | 49B active",
+  "m.glm52.t":"MoE · MLA + DSA | 40B active",
+  "m.minimax-m25.t":"MoE · 純 GQA(全層フルアテンション) | 10B active",
+  "m.kimi-k26.t":"MoE · MLA(全層) | 32B active",
+  "m.kimi-k3.t":"MoE · 69×KDA + 25×Gated MLA | 104B active",
+  "m.qwen38-max.t":"MoE · 69×線形 + 23×フルアテンション | 95B active",
+  "m.qwen3-8b.t":"Dense · GQA(全層フルアテンション)",
+  "m.qwen3-14b.t":"Dense · GQA(全層フルアテンション)",
+  "m.qwen3-32b.t":"Dense · GQA(全層フルアテンション)",
+  "m.qwen3-30b-a3b.t":"MoE · GQA | 3B active",
+  "m.qwen3-235b.t":"MoE · GQA | 22B active",
+  "m.llama4-scout.t":"MoE · GQA | 17B active",
+  "m.llama4-mav.t":"MoE · GQA | 17B active",
+  "m.glm46.t":"MoE · GQA | 32B active",
+  "m.deepseek-v31.t":"MoE · MLA | 37B active",
+  "m.deepseek-v32.t":"MoE · MLA | 37B active",
+
+  "m.gemma4-31b.q":"config の読み取りでフルアテンション層数が 8 と 10 に割れたため、保守的に 10 を採用。グローバル層の global_head_dim は 512 ですが、ここでは 256 として計算しています",
+  "m.deepseek-v4-flash.q":"config に層タイプの配列がないため、43 層すべてを対象とする保守的な見積もりです。DeepSeek は DSA スパースアテンションにより 1M コンテキストで KV が V3.2 の約 10% になるとしています",
+  "m.deepseek-v4-pro.q":"config に層タイプの配列がないため、61 層すべてを対象とする保守的な見積もりです",
+  "m.qwen38-max.q":"公式の公開ウェイトがなく(Hugging Face には第三者の蒸留/量子化版のみ)、アーキテクチャは全て推定値です。hidden と KV heads は未確認",
+
+  "arch.foot":`<strong>総レイヤー数 ≠ KV を保持する層数。</strong>線形アテンション層(Mamba / DeltaNet)は固定サイズの状態しか持たず、KV には計上されません。スライディング層の KV はウィンドウ幅が上限です。
+            MoE の重みは<em>総</em>パラメータ数で計算します(全エキスパートが常駐するため)。<code>MLA latent</code> &gt; 0 のときは圧縮経路(×2 なし)を使います。`,
+
+  "tip.frag":`<strong class="tip-h">3 つのテンプレートで予備領域が異なる理由</strong>
+              <div class="tip-scroll">
+                <table>
+                  <thead><tr><th>テンプレート</th><th>同時実行</th><th>コンテキスト</th><th>予備</th><th>理由</th></tr></thead>
+                  <tbody>
+                    <tr><td>デジタルヒューマン／サポート</td><td>48</td><td>4K</td><td><b>10%</b></td><td>短いシーケンスが多く、それぞれが半端に埋まった最終ブロック分を負担するため、無駄の割合が最も高い</td></tr>
+                    <tr><td>エンタープライズ RAG</td><td>16</td><td>16K</td><td><b>8%</b></td><td>中間</td></tr>
+                    <tr><td>長文ドキュメント</td><td>4</td><td>128K</td><td><b>6%</b></td><td>長いシーケンスが少数。末尾の無駄が超長シーケンスで薄まるため、割合は最も低い</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <strong class="tip-h tip-h2">自分で調整する場合</strong>
+              <ul>
+                <li><b>0%</b> —— 理論上の下限。「絶対的な最小値はいくつか」を知りたいときだけに使い、購買判断には使わないでください</li>
+                <li><b>8%</b> —— 一般的な vLLM の定常状態</li>
+                <li><b>15–25%</b> —— 長時間稼働のサービス、負荷変動が大きい、LoRA を頻繁に切り替える場合</li>
+              </ul>`,
+
+  "tip.act":`<strong class="tip-h">この 3 つのボタンについて</strong>
+            <dl>
+              <dt>CSV をコピー</dt>
+              <dd>「見積もり結果」の数値表(モデルの重み、KV キャッシュ、合計など)をスプレッドシート形式でコピーします。Excel や Google Sheets に貼り付けてそのまま分析できます。</dd>
+              <dt>設定コードをコピー</dt>
+              <dd>現在の設定すべて(モデル、精度、コンテキスト、各パラメータ)を 1 本の短い文字列にまとめます。同僚に送れば、「設定コードを読み込む」に貼り付けるだけで同じ結果が再現されます。</dd>
+              <dt>設定コードを読み込む</dt>
+              <dd>他の人から受け取った、または以前保存した設定コードを貼り付けると、設定一式を一度に復元します。URL に <code>#cfg=…</code> として持たせれば、ページを開いた時点で自動復元されます。</dd>
+            </dl>`,
+
+  "foot":`<strong>計算モデル</strong>:総量 = (重み + KV キャッシュ + アクティベーション) ÷ 並列数 + フレームワーク常駐、これに断片化の予備を掛けます。<br>
+    重み = 総パラメータ数 × 1 パラメータあたりのバイト数(MoE は全エキスパートを含む。INT4/INT8/FP8 はグループ量子化の scales 分を別途加算)。<br>
+    <strong>KV キャッシュは層タイプ別に計算</strong>:<code>2 × KVheads × headdim × バイト数 × (フルアテンション層 × コンテキスト + スライディング層 × min(コンテキスト, ウィンドウ)) × 同時実行数</code>。
+    線形アテンション層(Mamba / Gated DeltaNet / KDA)は状態が固定サイズでコンテキストに応じて増えないため、対象外です。MLA は圧縮経路 <code>latent × …</code>(×2 なし)を使います。
+    <strong>総レイヤー数 ≠ KV を保持する層数</strong>——2026 年のモデルの多くはハイブリッド構成で、総レイヤー数をそのまま使うと数倍の過大見積もりになります。<br>
+    <strong>テンソル並列 (TP)</strong> は 2 の冪です。GQA の KV は最大でも <code>KV heads</code> 個までしか分割できません。<strong>MLA の KV は各 GPU に複製され、TP を増やしても減りません</strong>——DeepSeek 系のモデルが過小見積もりされがちな理由です。<br>
+    数値はすべて GiB(2³⁰ bytes)です。<strong>アクセラレータが「96GB」と表記する容量は、そもそも 2³⁰ 進法の値です</strong>——ビデオメモリは 2 の冪のダイで構成され、nvidia-smi は「80GB」の H100 に対して 81,920 MiB(= 80 GiB)と報告します。したがって本表は一貫して GiB 表記とし、十進法への換算は行っていません。統合メモリ機(EdgeXpert/DGX Spark (GB10)、Jetson Thor、RTX Spark (N1x))は OS/CPU の予約分を差し引き済みです。実際の使用量は vLLM / TensorRT-LLM の割り当て方針によって変わるため、保証値ではなくエンジニアリング上の見積もりとしてお使いください。モデルのアーキテクチャは公開スペックの参考値です。公式の config を優先してください。<br>
+    <strong>電気代</strong> = TDP × 稼働率 × 8,760 時間 × 単価。アクセラレータ本体のみで、ホスト・冷却・PUE は含みません。TDP は代表的なボード消費電力の参考値(統合メモリ機はシステム全体)で、SKU や熱設計によって変動します。<br>
+    <strong>4-bit ブロック浮動小数点</strong>:NVFP4 は 16 要素ごとに FP8(E4M3)のスケールを 1 つ共有し(+12.5%)、MXFP4 は 32 要素ごとに E8M0 のスケールを 1 つ共有します(+6.25%)。したがって、どちらも素の INT4 とは占有量が異なります。
+    取り消し線のフォーマットは、そのモデルに公開ウェイトが存在せず選択できないことを示します。NVFP4 はネイティブ高速化に Blackwell 世代のハードウェアが必要です。`,
+},
+
+/* 英文。P2 已完成全部 175 個 key。 */
 "en": {
   "head.docTitle":"VRAM Calculator",
   "head.eyebrow":"AI Deployment Capacity Planning",

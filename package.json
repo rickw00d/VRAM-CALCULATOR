@@ -7,8 +7,8 @@
     "test": "node test/ctx-test.js",
     "test:i18n": "node test/i18n-test.js",
     "test:visual": "node test/visual.js",
-    "test:visual:en": "node test/visual.js en",
-    "test:all": "npm test && npm run test:i18n && npm run test:visual && npm run test:visual:en"
+    "test:visual:all": "node test/visual.js zh-TW && node test/visual.js zh-CN && node test/visual.js ja && node test/visual.js en",
+    "test:all": "npm test && npm run test:i18n && npm run test:visual:all"
   },
   "devDependencies": {
     "jsdom": "^30.0.1",

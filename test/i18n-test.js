@@ -151,6 +151,78 @@ console.log("\n== 4.5 英文版畫面上不得殘留中文 ==");
   t("選單選項與分組無中文殘留", optBad.length === 0, optBad.slice(0, 5).join(" ／ "));
 }
 
+console.log("\n== 4.6 簡中 / 日文的字形與字種檢查 ==");
+{
+  /* 覆蓋率 177/177 只證明「key 都填了」,不證明填的內容對:
+     簡中可能是繁中複製貼上(OpenCC 直轉也算),日文可能殘留中文。
+     用「該語系絕不會出現的字」來擋。 */
+
+  // 繁體專用字形,簡體一律不用(只收錄兩者確實不同的,共用字不列)
+  const TRAD_FOR_SC = /[體數實顯點關對當從傳續會學覺稱舊專屬檢據圖應總變擴價單讀譯錄們這樣麼沒並與為個時長開進過還億網線業經種發檔軟優選擇驗極設語憶內態準確執資層權計]/;
+  // 日文絕不使用的字:排除了 並為個時長開進過還億網線業種設資執層極優軟選語態準確
+  // 這些日文確實在用(並列/為替/個人/時間/成長…),誤收會產生假警報
+  const TRAD_FOR_JA = /[體數實顯點關對當從傳續會學覺稱舊專屬檢據圖應總變擴價單讀譯錄們這樣麼沒發經權內擇驗檔]/;
+  const KANA = /[぀-ゟ゠-ヿ]/;
+
+  const visibleOf = d => {
+    const out = [];
+    const walk = el => {
+      if (["SCRIPT", "STYLE"].includes(el.tagName) || el.id === "lang") return;
+      [...el.childNodes].forEach(n => {
+        if (n.nodeType === 3 && n.textContent.trim()) out.push([el, n.textContent]);
+        else if (n.nodeType === 1) walk(n);
+      });
+    };
+    walk(d.body);
+    [...d.querySelectorAll("option, optgroup")]
+      .filter(o => o.closest("#lang") === null)
+      .forEach(o => out.push([o, o.label || o.textContent]));
+    return out;
+  };
+
+  for (const [loc, bad, label] of [["zh-CN", TRAD_FOR_SC, "繁體字形"], ["ja", TRAD_FOR_JA, "繁體字形"]]) {
+    const { d, errs } = load(`http://localhost/?lang=${loc}`);
+    t(`${loc}:無執行期錯誤`, errs.length === 0, errs.join(" | "));
+    const nodes = visibleOf(d);
+    const offenders = nodes.filter(([, s]) => bad.test(s))
+      .map(([el, s]) => `<${el.tagName.toLowerCase()}> "${s.trim().slice(0, 40)}"`);
+    t(`${loc}:畫面上無${label}殘留`, offenders.length === 0, offenders.slice(0, 4).join(" ／ "));
+
+    const attrBad = [];
+    d.querySelectorAll("*").forEach(el =>
+      ["title", "aria-label", "placeholder"].forEach(a => {
+        const v = el.getAttribute(a);
+        if (v && bad.test(v) && el.id !== "lang") attrBad.push(`${el.tagName.toLowerCase()}[${a}]="${v.slice(0, 35)}"`);
+      }));
+    t(`${loc}:屬性無${label}殘留`, attrBad.length === 0, attrBad.slice(0, 3).join(" ／ "));
+
+    t(`${loc}:html lang 正確`, d.documentElement.lang === loc, d.documentElement.lang);
+    const font = d.documentElement.style.getPropertyValue("--cjk-font");
+    const want = loc === "zh-CN" ? "SC" : "JP";
+    t(`${loc}:字型為 Noto Sans ${want}`, font.includes(want), font);
+
+    if (loc === "ja") {
+      // 日文若通篇沒有假名,幾乎可以斷定是中文沒翻
+      const joined = nodes.map(([, s]) => s).join("");
+      t("ja:畫面含假名(證明真的是日文而非中文)", KANA.test(joined));
+      /* 簡體專用字形混入日文 —— 這是簡中/日文兩份字典之間複製貼上的典型失誤。
+         只收錄日文確實不用的(日文用 時長開進過 等,不可誤收)。
+         注意「不能用『長句純漢字』當啟發式」:公式 playbook、同時実行 都是
+         正常日文卻沒有假名,會產生大量假警報。 */
+      const SIMP_FOR_JA = /[显缓认说这们实检义齐广总变扩价单读译录专觉优软选择验层权态设资执语个为并时长开进过还亿网线业经种发档]/;
+      const simp = nodes.filter(([, s]) => SIMP_FOR_JA.test(s))
+        .map(([el, s]) => `<${el.tagName.toLowerCase()}> "${s.trim().slice(0, 35)}"`);
+      t("ja:無簡體字形混入", simp.length === 0, simp.slice(0, 3).join(" ／ "));
+    }
+    if (loc === "zh-CN") {
+      // 反向:假名混入簡中,同樣是兩份字典互相污染的徵兆
+      const kana = nodes.filter(([, s]) => KANA.test(s))
+        .map(([el, s]) => `<${el.tagName.toLowerCase()}> "${s.trim().slice(0, 35)}"`);
+      t("zh-CN:無日文假名混入", kana.length === 0, kana.slice(0, 3).join(" ／ "));
+    }
+  }
+}
+
 console.log("\n== 5. 執行期切換語系保留狀態 ==");
 {
   const { w, d } = load("http://localhost/?lang=zh-TW");
