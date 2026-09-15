@@ -1,3 +1,4 @@
+<!doctype html>
 <title>VRAM 記憶體估算器</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,9 +42,12 @@
   }
 
   *{box-sizing:border-box}
+  /* 語系字型:共用漢字在 TC/SC/JP 的字形不同,套錯會讓日文/簡中讀起來彆扭。
+     由 applyI18n() 依語系覆寫;此處為預設值。 */
+  :root{--cjk-font:"Noto Sans TC"}
   body{
     margin:0; background:var(--bg); color:var(--text);
-    font-family:"IBM Plex Sans",system-ui,"Noto Sans TC",sans-serif;
+    font-family:"IBM Plex Sans",system-ui,var(--cjk-font),sans-serif;
     line-height:1.55; -webkit-font-smoothing:antialiased;
   }
   .wrap{max-width:1180px; margin:0 auto; padding:clamp(20px,4vw,44px) clamp(16px,3vw,32px) 64px}
@@ -59,6 +63,12 @@
     border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; display:flex; gap:7px; align-items:center;
   }
   .theme-btn:hover{border-color:var(--border-strong); color:var(--text)}
+  .hdr-ctl{display:flex; gap:8px; align-items:center}
+  .lang-sel{
+    font-family:inherit; font-size:.82rem; color:var(--text-2); background:var(--surface);
+    border:1px solid var(--border); border-radius:8px; padding:8px 10px; cursor:pointer; width:auto;
+  }
+  .lang-sel:hover{border-color:var(--border-strong); color:var(--text)}
 
   .scenarios{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:24px}
   .scn{
@@ -211,73 +221,76 @@
 <div class="wrap">
   <header>
     <div class="brand">
-      <span class="eyebrow">AI 部署容量規劃</span>
-      <h1>LLM 推論 VRAM 記憶體估算器</h1>
-      <p class="sub">輸入模型與工作負載條件,即時估算 GPU 記憶體需求,並比對加速卡落點。已計入 GQA/MLA 分片限制與統一記憶體的系統保留。</p>
+      <span class="eyebrow" data-i18n="head.eyebrow">AI 部署容量規劃</span>
+      <h1 data-i18n="head.title">LLM 推論 VRAM 記憶體估算器</h1>
+      <p class="sub" data-i18n="head.sub">輸入模型與工作負載條件,即時估算 GPU 記憶體需求,並比對加速卡落點。已計入 GQA/MLA 分片限制與統一記憶體的系統保留。</p>
     </div>
-    <button class="theme-btn" id="themeBtn"><span id="themeIcon" aria-hidden="true">◐</span><span id="themeTxt">主題</span></button>
+    <div class="hdr-ctl">
+      <select class="lang-sel" id="lang" aria-label="Language / 語言"></select>
+      <button class="theme-btn" id="themeBtn"><span id="themeIcon" aria-hidden="true">◐</span><span id="themeTxt">主題</span></button>
+    </div>
   </header>
 
   <div class="scenarios" id="scenarios">
     <button class="scn" data-scn="rag" aria-pressed="false">
-      <span class="st"><span class="ic" aria-hidden="true">📚</span>企業 RAG / 知識問答</span>
-      <span class="sd">長上下文檢索、中並發。對應 AI-Q / Enterprise RAG 類 Blueprint。</span>
+      <span class="st"><span class="ic" aria-hidden="true">📚</span><span data-i18n="scn.rag.t">企業 RAG / 知識問答</span></span>
+      <span class="sd" data-i18n="scn.rag.d">長上下文檢索、中並發。對應 AI-Q / Enterprise RAG 類 Blueprint。</span>
     </button>
     <button class="scn" data-scn="human" aria-pressed="false">
-      <span class="st"><span class="ic" aria-hidden="true">🗣️</span>數位人 / 客服對話</span>
-      <span class="sd">即時低延遲、較高並發、中等上下文。對應 Digital Human 類 Blueprint。</span>
+      <span class="st"><span class="ic" aria-hidden="true">🗣️</span><span data-i18n="scn.human.t">數位人 / 客服對話</span></span>
+      <span class="sd" data-i18n="scn.human.d">即時低延遲、較高並發、中等上下文。對應 Digital Human 類 Blueprint。</span>
     </button>
     <button class="scn" data-scn="doc" aria-pressed="false">
-      <span class="st"><span class="ic" aria-hidden="true">📄</span>長文件處理 / 摘要</span>
-      <span class="sd">超長上下文、低並發批次。對應 PDF-to-Podcast / 文件擷取類 Blueprint。</span>
+      <span class="st"><span class="ic" aria-hidden="true">📄</span><span data-i18n="scn.doc.t">長文件處理 / 摘要</span></span>
+      <span class="sd" data-i18n="scn.doc.d">超長上下文、低並發批次。對應 PDF-to-Podcast / 文件擷取類 Blueprint。</span>
     </button>
     <button class="scn" data-scn="agent" aria-pressed="false">
-      <span class="st"><span class="ic" aria-hidden="true">🤖</span>OpenClaw / Hermes Agent</span>
-      <span class="sd">兩者共用同一組配置。依 NVIDIA DGX Spark playbook 的 agent-ready recipe:Qwen3.6 35B NVFP4 + FP8 KV、256K 上下文、並發 4。</span>
+      <span class="st"><span class="ic" aria-hidden="true">🤖</span><span data-i18n="scn.agent.t">OpenClaw / Hermes Agent</span></span>
+      <span class="sd" data-i18n="scn.agent.d">兩者共用同一組配置。依 NVIDIA DGX Spark playbook 的 agent-ready recipe:Qwen3.6 35B NVFP4 + FP8 KV、256K 上下文、並發 4。</span>
     </button>
   </div>
 
   <div class="grid">
     <div class="card">
-      <div class="card-h"><h2>輸入條件</h2></div>
+      <div class="card-h"><h2 data-i18n="in.title">輸入條件</h2></div>
       <div class="card-b">
         <div class="field">
-          <label for="model">LLM 模型 <span class="hint">(2025/08 gpt-oss 起的開源權重模型)</span></label>
+          <label for="model" data-i18n-html="in.model">LLM 模型 <span class="hint">(2025/08 gpt-oss 起的開源權重模型)</span></label>
           <select id="model"></select>
           <label style="display:flex;align-items:center;gap:7px;margin:8px 0 0;font-size:.78rem;cursor:pointer">
-            <input type="checkbox" id="showOld" style="width:auto;margin:0"> 顯示舊世代模型(對照用)
+            <input type="checkbox" id="showOld" style="width:auto;margin:0"> <span data-i18n="in.showOld">顯示舊世代模型(對照用)</span>
           </label>
         </div>
 
         <div class="field">
-          <label id="wprecLbl">權重精度 / 量化格式 <span class="hint">(Data Format)</span></label>
+          <label id="wprecLbl" data-i18n-html="in.wprec">權重精度 / 量化格式 <span class="hint">(Data Format)</span></label>
           <div class="seg" id="wprec" role="group" aria-labelledby="wprecLbl"></div>
         </div>
 
         <div class="row">
           <div class="field">
-            <label for="ctx">上下文長度 <span class="hint">(tokens)</span></label>
+            <label for="ctx" data-i18n-html="in.ctx">上下文長度 <span class="hint">(tokens)</span></label>
             <select id="ctx"></select>
             <input type="number" id="ctxCustom" min="128" max="10000000" step="512" value="8192"
-                   hidden aria-label="自訂上下文長度 (tokens)" style="margin-top:8px">
+                   hidden data-i18n-attr="aria-label:in.ctxCustomAria" aria-label="自訂上下文長度 (tokens)" style="margin-top:8px">
           </div>
           <div class="field">
-            <label for="users">同時並發用戶 <span class="hint">(batch)</span></label>
+            <label for="users" data-i18n-html="in.users">同時並發用戶 <span class="hint">(batch)</span></label>
             <input type="number" id="users" min="1" max="10000" step="1" value="16">
           </div>
         </div>
 
         <div class="field">
-          <label id="kvprecLbl">KV Cache 精度 <span class="hint">(可與權重不同)</span></label>
+          <label id="kvprecLbl" data-i18n-html="in.kvprec">KV Cache 精度 <span class="hint">(可與權重不同)</span></label>
           <div class="seg" id="kvprec" role="group" aria-labelledby="kvprecLbl"></div>
         </div>
 
         <div class="field">
           <div class="lbl-row">
-            <label for="frag">碎片化 / 保留餘裕 <span class="hint">(PagedAttention 區塊對齊、分配器碎片)</span></label>
-            <button type="button" class="tipbtn" aria-label="碎片化餘裕怎麼設?顯示說明" aria-describedby="fragTip">i</button>
+            <label for="frag" data-i18n-html="in.frag">碎片化 / 保留餘裕 <span class="hint">(PagedAttention 區塊對齊、分配器碎片)</span></label>
+            <button type="button" class="tipbtn" data-i18n-attr="aria-label:in.fragTipAria" aria-label="碎片化餘裕怎麼設?顯示說明" aria-describedby="fragTip">i</button>
             <span id="fragv" style="font-family:'IBM Plex Mono';color:var(--accent)">8%</span>
-            <div class="tip" id="fragTip" role="tooltip">
+            <div class="tip" id="fragTip" role="tooltip" data-i18n-html="tip.frag">
               <strong class="tip-h">三個範本為什麼給不同的餘裕</strong>
               <div class="tip-scroll">
                 <table>
@@ -301,30 +314,30 @@
         </div>
 
         <details class="arch">
-          <summary>模型架構參數(進階,可修改;預設為公開規格參考值)</summary>
+          <summary data-i18n="arch.summary">模型架構參數(進階,可修改;預設為公開規格參考值)</summary>
           <div class="row-3">
-            <div><label for="params">參數量 (B)</label><input type="number" id="params" min="0.1" max="10000" step="0.1" value="27.8"></div>
-            <div><label for="layers">總層數 L</label><input type="number" id="layers" min="1" max="500" step="1" value="64"></div>
-            <div><label for="hidden">hidden</label><input type="number" id="hidden" min="64" max="65536" step="1" value="5120"></div>
+            <div><label for="params" data-i18n="arch.params">參數量 (B)</label><input type="number" id="params" min="0.1" max="10000" step="0.1" value="27.8"></div>
+            <div><label for="layers" data-i18n="arch.layers">總層數 L</label><input type="number" id="layers" min="1" max="500" step="1" value="64"></div>
+            <div><label for="hidden" data-i18n="arch.hidden">hidden</label><input type="number" id="hidden" min="64" max="65536" step="1" value="5120"></div>
           </div>
           <div class="row-3">
-            <div><label for="lfull" title="KV 隨上下文線性成長的層">全注意力層</label><input type="number" id="lfull" min="0" max="500" step="1" value="16"></div>
-            <div><label for="lswa" title="KV 有上限的滑動視窗層">滑窗層</label><input type="number" id="lswa" min="0" max="500" step="1" value="0"></div>
-            <div><label for="win" title="滑動視窗大小 (tokens)">視窗大小</label><input type="number" id="win" min="0" max="131072" step="128" value="0"></div>
+            <div><label for="lfull" data-i18n="arch.lfull" data-i18n-attr="title:arch.lfullT" title="KV 隨上下文線性成長的層">全注意力層</label><input type="number" id="lfull" min="0" max="500" step="1" value="16"></div>
+            <div><label for="lswa" data-i18n="arch.lswa" data-i18n-attr="title:arch.lswaT" title="KV 有上限的滑動視窗層">滑窗層</label><input type="number" id="lswa" min="0" max="500" step="1" value="0"></div>
+            <div><label for="win" data-i18n="arch.win" data-i18n-attr="title:arch.winT" title="滑動視窗大小 (tokens)">視窗大小</label><input type="number" id="win" min="0" max="131072" step="128" value="0"></div>
           </div>
           <div class="row-3">
-            <div><label for="kvheads">KV heads</label><input type="number" id="kvheads" min="0" max="256" step="1" value="4"></div>
-            <div><label for="headdim">head dim</label><input type="number" id="headdim" min="0" max="1024" step="1" value="256"></div>
-            <div><label for="latent" title="DeepSeek 類 MLA 壓縮 KV 維度;>0 時改用 MLA 公式">MLA latent</label><input type="number" id="latent" min="0" max="8192" step="1" value="0"></div>
+            <div><label for="kvheads" data-i18n="arch.kvheads">KV heads</label><input type="number" id="kvheads" min="0" max="256" step="1" value="4"></div>
+            <div><label for="headdim" data-i18n="arch.headdim">head dim</label><input type="number" id="headdim" min="0" max="1024" step="1" value="256"></div>
+            <div><label for="latent" data-i18n="arch.latent" data-i18n-attr="title:arch.latentT" title="DeepSeek 類 MLA 壓縮 KV 維度;>0 時改用 MLA 公式">MLA latent</label><input type="number" id="latent" min="0" max="8192" step="1" value="0"></div>
           </div>
           <div class="row">
-            <div><label for="vocab">詞彙表 vocab</label><input type="number" id="vocab" min="1000" max="1000000" step="1" value="248320"></div>
-            <div><label for="chunk" title="prefill 分塊大小,決定啟動值峰值">prefill chunk</label><input type="number" id="chunk" min="128" max="65536" step="128" value="2048"></div>
+            <div><label for="vocab" data-i18n="arch.vocab">詞彙表 vocab</label><input type="number" id="vocab" min="1000" max="1000000" step="1" value="248320"></div>
+            <div><label for="chunk" data-i18n="arch.chunk" data-i18n-attr="title:arch.chunkT" title="prefill 分塊大小,決定啟動值峰值">prefill chunk</label><input type="number" id="chunk" min="128" max="65536" step="128" value="2048"></div>
           </div>
           <p class="foot">
-            <strong>總層數 ≠ 有 KV 的層數。</strong>線性注意力層(Mamba / DeltaNet)狀態固定,不計入 KV;滑窗層的 KV 上限為視窗大小。
-            MoE 權重以「總參數量」計(全部專家常駐);<code>MLA latent</code> &gt; 0 時走壓縮路徑(不 ×2)。<br>
-            目前:<span id="attnBadge" style="color:var(--accent);font-weight:600"></span>
+            <span data-i18n-html="arch.foot"><strong>總層數 ≠ 有 KV 的層數。</strong>線性注意力層(Mamba / DeltaNet)狀態固定,不計入 KV;滑窗層的 KV 上限為視窗大小。
+            MoE 權重以「總參數量」計(全部專家常駐);<code>MLA latent</code> &gt; 0 時走壓縮路徑(不 ×2)。</span><br>
+            <span data-i18n="arch.current">目前:</span><span id="attnBadge" style="color:var(--accent);font-weight:600"></span>
             <span id="srcLink" style="display:block;margin-top:5px"></span>
             <span id="qFlag" style="display:block;margin-top:5px;color:var(--warn)"></span>
             <span id="archWarn" style="display:block;margin-top:5px;color:var(--over)"></span>
@@ -333,22 +346,22 @@
 
         <div class="row" style="margin-top:15px">
           <div class="field" style="margin:0">
-            <label for="rate">電價 <span class="hint">(每 kWh)</span></label>
+            <label for="rate" data-i18n-html="in.rate">電價 <span class="hint">(每 kWh)</span></label>
             <input type="number" id="rate" min="0" max="100" step="0.1" value="3.5">
           </div>
           <div class="field" style="margin:0">
-            <label for="util">平均負載率 <span class="hint">(%)</span></label>
+            <label for="util" data-i18n-html="in.util">平均負載率 <span class="hint">(%)</span></label>
             <input type="number" id="util" min="1" max="100" step="1" value="70">
           </div>
         </div>
 
         <div class="actions">
-          <button type="button" class="act" id="copyCsv">複製 CSV</button>
-          <button type="button" class="act" id="copyCfg">複製設定碼</button>
-          <button type="button" class="act" id="loadCfg">載入設定碼</button>
-          <button type="button" class="tipbtn" aria-label="這三個按鈕做什麼?顯示說明" aria-describedby="actTip">i</button>
+          <button type="button" class="act" id="copyCsv" data-i18n="act.copyCsv">複製 CSV</button>
+          <button type="button" class="act" id="copyCfg" data-i18n="act.copyCfg">複製設定碼</button>
+          <button type="button" class="act" id="loadCfg" data-i18n="act.loadCfg">載入設定碼</button>
+          <button type="button" class="tipbtn" data-i18n-attr="aria-label:act.tipAria" aria-label="這三個按鈕做什麼?顯示說明" aria-describedby="actTip">i</button>
           <span class="act-msg" id="actMsg" role="status"></span>
-          <div class="tip tip-up" id="actTip" role="tooltip">
+          <div class="tip tip-up" id="actTip" role="tooltip" data-i18n-html="tip.act">
             <strong class="tip-h">這三個按鈕做什麼</strong>
             <dl>
               <dt>複製 CSV</dt>
@@ -364,45 +377,45 @@
     </div>
 
     <div class="card">
-      <div class="card-h"><h2>估算結果</h2><span id="perUser" style="font-size:.76rem;color:var(--text-muted);font-family:'IBM Plex Mono'"></span></div>
+      <div class="card-h"><h2 data-i18n="res.title">估算結果</h2><span id="perUser" style="font-size:.76rem;color:var(--text-muted);font-family:'IBM Plex Mono'"></span></div>
       <div class="card-b">
         <div class="total">
           <div class="big" id="totalGB" aria-live="polite">—<small>GiB</small></div>
-          <div class="cap" id="totalCap">單卡所需總記憶體</div>
+          <div class="cap" id="totalCap" data-i18n="res.capInit">單卡所需總記憶體</div>
         </div>
 
         <div class="legend">
-          <div><span class="dot" style="background:var(--w-weight)"></span>模型權重</div>
+          <div><span class="dot" style="background:var(--w-weight)"></span><span data-i18n="bd.weight">模型權重</span></div>
           <div><span class="dot" style="background:var(--w-kv)"></span>KV Cache</div>
-          <div><span class="dot" style="background:var(--w-act)"></span>啟動值</div>
-          <div><span class="dot" style="background:var(--w-oh)"></span>框架 + 餘裕</div>
+          <div><span class="dot" style="background:var(--w-act)"></span><span data-i18n="bd.act">啟動值</span></div>
+          <div><span class="dot" style="background:var(--w-oh)"></span><span data-i18n="res.legendOh">框架 + 餘裕</span></div>
         </div>
         <div class="bar" id="bar" aria-hidden="true"></div>
 
         <table class="breakdown"><tbody id="bd"></tbody></table>
 
-        <div class="card-h" style="padding:22px 0 0"><h2>GPU 落點比對</h2></div>
+        <div class="card-h" style="padding:22px 0 0"><h2 data-i18n="res.gpuTitle">GPU 落點比對</h2></div>
         <div class="legend" style="margin:6px 0 2px">
           <div><span class="dot" style="background:var(--mem-gddr)"></span>GDDR</div>
-          <div><span class="dot" style="background:var(--mem-unified)"></span>統一記憶體</div>
+          <div><span class="dot" style="background:var(--mem-unified)"></span><span data-i18n="mem.unified">統一記憶體</span></div>
           <div><span class="dot" style="background:var(--mem-hbm)"></span>HBM</div>
         </div>
         <div class="gpu-wrap">
           <table class="gpu">
-            <thead><tr><th>加速卡</th><th>VRAM</th><th>可用</th><th>張量並行</th><th>年電費</th><th>狀態</th></tr></thead>
+            <thead><tr><th data-i18n="gpu.th.card">加速卡</th><th>VRAM</th><th data-i18n="gpu.th.usable">可用</th><th data-i18n="gpu.th.tp">張量並行</th><th data-i18n="gpu.th.cost">年電費</th><th data-i18n="gpu.th.status">狀態</th></tr></thead>
             <tbody id="gpu"></tbody>
           </table>
         </div>
 
         <p class="note" id="note"></p>
 
-        <div class="card-h" style="padding:22px 0 0"><h2>推薦配置 · 營運估算</h2></div>
+        <div class="card-h" style="padding:22px 0 0"><h2 data-i18n="res.recTitle">推薦配置 · 營運估算</h2></div>
         <div class="rec" id="rec"></div>
       </div>
     </div>
   </div>
 
-  <footer>
+  <footer data-i18n-html="foot">
     <strong>計算模型</strong>:總量 = (權重 + KV Cache + 啟動值) ÷ 並行數 + 框架常駐,再乘上碎片化餘裕。<br>
     權重 = 總參數量 × 每參數位元組(MoE 含全部專家;INT4/INT8/FP8 另計分組量化的 scales 開銷)。<br>
     <strong>KV Cache 依層別分開計算</strong>:<code>2 × KVheads × headdim × 位元組 × (全注意力層 × 上下文 + 滑窗層 × min(上下文, 視窗)) × 並發</code>。
@@ -417,6 +430,345 @@
 </div>
 
 <script>
+/* ==================== i18n ====================
+   字典值可以是字串,也可以是函式(帶插值的訊息)。T() 兩者都吃。
+   查不到的 key 會回退到 zh-TW,再回退到呼叫端給的預設值 —— 漸進式翻譯
+   因此可以只翻一部分,未翻的部分不會變成空白或裸 key。
+   模型/GPU/上下文選項的文案留在各自的資料陣列裡當 zh-TW 原文,
+   其他語系用 `m.<id>.t` 這類 key 覆寫,如此資料陣列完全不必改動。 */
+const LOCALES = [
+  {id:"zh-TW", name:"繁體中文", font:'"Noto Sans TC"'},
+  {id:"en",    name:"English",  font:""},
+];
+
+const DICT = {
+"zh-TW": {
+  "head.docTitle":"VRAM 記憶體估算器",
+  "head.eyebrow":"AI 部署容量規劃",
+  "head.title":"LLM 推論 VRAM 記憶體估算器",
+  "head.sub":"輸入模型與工作負載條件,即時估算 GPU 記憶體需求,並比對加速卡落點。已計入 GQA/MLA 分片限制與統一記憶體的系統保留。",
+
+  "scn.rag.t":"企業 RAG / 知識問答",
+  "scn.rag.d":"長上下文檢索、中並發。對應 AI-Q / Enterprise RAG 類 Blueprint。",
+  "scn.human.t":"數位人 / 客服對話",
+  "scn.human.d":"即時低延遲、較高並發、中等上下文。對應 Digital Human 類 Blueprint。",
+  "scn.doc.t":"長文件處理 / 摘要",
+  "scn.doc.d":"超長上下文、低並發批次。對應 PDF-to-Podcast / 文件擷取類 Blueprint。",
+  "scn.agent.t":"OpenClaw / Hermes Agent",
+  "scn.agent.d":"兩者共用同一組配置。依 NVIDIA DGX Spark playbook 的 agent-ready recipe:Qwen3.6 35B NVFP4 + FP8 KV、256K 上下文、並發 4。",
+
+  "in.title":"輸入條件",
+  "in.model":'LLM 模型 <span class="hint">(2025/08 gpt-oss 起的開源權重模型)</span>',
+  "in.showOld":"顯示舊世代模型(對照用)",
+  "in.wprec":'權重精度 / 量化格式 <span class="hint">(Data Format)</span>',
+  "in.ctx":'上下文長度 <span class="hint">(tokens)</span>',
+  "in.ctxCustomAria":"自訂上下文長度 (tokens)",
+  "in.users":'同時並發用戶 <span class="hint">(batch)</span>',
+  "in.kvprec":'KV Cache 精度 <span class="hint">(可與權重不同)</span>',
+  "in.frag":'碎片化 / 保留餘裕 <span class="hint">(PagedAttention 區塊對齊、分配器碎片)</span>',
+  "in.fragTipAria":"碎片化餘裕怎麼設?顯示說明",
+  "in.rate":'電價 <span class="hint">(每 kWh)</span>',
+  "in.util":'平均負載率 <span class="hint">(%)</span>',
+
+  "arch.summary":"模型架構參數(進階,可修改;預設為公開規格參考值)",
+  "arch.params":"參數量 (B)", "arch.layers":"總層數 L", "arch.hidden":"hidden",
+  "arch.lfull":"全注意力層", "arch.lfullT":"KV 隨上下文線性成長的層",
+  "arch.lswa":"滑窗層",     "arch.lswaT":"KV 有上限的滑動視窗層",
+  "arch.win":"視窗大小",    "arch.winT":"滑動視窗大小 (tokens)",
+  "arch.kvheads":"KV heads", "arch.headdim":"head dim",
+  "arch.latent":"MLA latent", "arch.latentT":"DeepSeek 類 MLA 壓縮 KV 維度;>0 時改用 MLA 公式",
+  "arch.vocab":"詞彙表 vocab", "arch.chunk":"prefill chunk",
+  "arch.chunkT":"prefill 分塊大小,決定啟動值峰值",
+  "arch.current":"目前:",
+
+  "act.copyCsv":"複製 CSV", "act.copyCfg":"複製設定碼", "act.loadCfg":"載入設定碼",
+  "act.tipAria":"這三個按鈕做什麼?顯示說明",
+
+  "res.title":"估算結果",
+  "res.capInit":"單卡所需總記憶體",
+  "res.legendOh":"框架 + 餘裕",
+  "res.gpuTitle":"GPU 落點比對",
+  "res.recTitle":"推薦配置 · 營運估算",
+  "mem.unified":"統一記憶體",
+
+  "gpu.th.card":"加速卡", "gpu.th.usable":"可用", "gpu.th.tp":"張量並行",
+  "gpu.th.cost":"年電費", "gpu.th.status":"狀態",
+  "gpu.single":"單卡可容",
+  "gpu.multi": n => `${n}× 並行`,
+  "gpu.over":  maxN => `超出 ${maxN}× 上限`,
+
+  "bd.weight":"模型權重", "bd.act":"啟動值", "bd.oh":"框架常駐 + 餘裕", "bd.total":"合計",
+  "bd.qoh":    pct => `(含 ${pct}% 量化開銷)`,
+  "bd.kvSub":  (users, ctx, cap) => `(${users} 並發 × ${ctx} ctx${cap ? ` · 滑窗封頂 ${cap}` : ""})`,
+  "bd.actSub": chunk => `(chunk ${chunk})`,
+  "bd.ohSub":  pct => `(${pct}% 碎片化)`,
+
+  "res.cap": (path, Lf, Lsw, lin) => `單卡(TP=1)所需總記憶體 · ${path} 路徑 · KV 層 ${Lf} 全注意力`
+    + (Lsw ? ` + ${Lsw} 滑窗` : "") + (lin ? ` + ${lin} 線性層不計` : ""),
+  "res.perUser": v => `每用戶 KV ≈ ${v} GiB`,
+
+  "note.single": (name, usable) => `最小可單卡容納者為 <strong>${name}</strong>(可用 ${usable} GiB)。`,
+  "note.multi":  (n, name) => `無單卡方案;最小可行為 <strong>${n}× ${name}</strong>。`,
+  "note.none":"清單中無任何配置可容納,請降低精度、並發或上下文。",
+  "note.mla":"此模型走 MLA,KV Cache 在張量並行下<strong>各卡複製而不遞減</strong>,加卡只攤薄權重。要壓 KV 請降並發或上下文。",
+  "note.kvHigh": pct => `KV Cache 佔比偏高(${pct}%),改用 <code>FP8</code> KV 可省近半。`,
+  "note.weightDom":"權重為主要開銷,降低權重精度(FP8 / INT4)最有效。",
+
+  "rec.config":"配置", "rec.perCard":"每卡佔用", "rec.headroom":"餘裕",
+  "rec.peakW":"尖峰功耗", "rec.kwh":"年耗電", "rec.cost":"年電費",
+  "rec.none":"尚無可行配置,故不估算功耗與電費。",
+
+  "warn.prefix":"⚠ ", "warn.join":"；",
+  "warn.layerConflict": (sum, L) => `全注意力層 + 滑窗層(${sum})超過總層數 L(${L}),層數設定互相矛盾`,
+  "warn.swNoWin": Lsw => `已設定 ${Lsw} 個滑窗層,但視窗大小為 0 → 這些層的 KV 會被當成 0,可能不是你要的結果`,
+
+  "msg.custom":"自訂",
+  "msg.unconfirmed":"⚠ 未確認:",
+  "msg.srcFrom":"規格來源:",
+  "msg.srcNone":"規格來源:無官方公開權重,架構為推估值",
+  "msg.noWeights": label => `此模型無公開的 ${label} 權重`,
+  "msg.copyFail":"複製失敗,請手動選取",
+  "msg.csvCopied":"CSV 已複製到剪貼簿",
+  "msg.cfgCopied":"設定碼已複製",
+  "msg.cfgLoaded":"設定已載入",
+  "msg.cfgBad":"設定碼無法解析",
+  "msg.paste":"貼上設定碼後按 Enter",
+
+  "csv.item":"項目", "csv.value":"值", "csv.model":"模型", "csv.wprec":"權重精度",
+  "csv.kvprec":"KV 精度", "csv.ctx":"上下文", "csv.users":"並發",
+  "csv.memItem":"記憶體項目", "csv.infeasible":"不可行",
+
+  "ctx.custom":"自訂…",
+  "theme.dark":"深色", "theme.light":"淺色",
+  "theme.aria": to => `切換至${to}主題`,
+
+  // ---- 長篇論述(翻譯成本最高,需領域知識而非機械對譯)----
+  "arch.foot":`<strong>總層數 ≠ 有 KV 的層數。</strong>線性注意力層(Mamba / DeltaNet)狀態固定,不計入 KV;滑窗層的 KV 上限為視窗大小。
+            MoE 權重以「總參數量」計(全部專家常駐);<code>MLA latent</code> &gt; 0 時走壓縮路徑(不 ×2)。`,
+
+  "tip.frag":`<strong class="tip-h">三個範本為什麼給不同的餘裕</strong>
+              <div class="tip-scroll">
+                <table>
+                  <thead><tr><th>範本</th><th>並發</th><th>上下文</th><th>餘裕</th><th>為什麼</th></tr></thead>
+                  <tbody>
+                    <tr><td>數位人／客服</td><td>48</td><td>4K</td><td><b>10%</b></td><td>序列多又短,每條都付一次區塊尾巴的代價,浪費佔比最高</td></tr>
+                    <tr><td>企業 RAG</td><td>16</td><td>16K</td><td><b>8%</b></td><td>中間值</td></tr>
+                    <tr><td>長文件處理</td><td>4</td><td>128K</td><td><b>6%</b></td><td>序列少又長,尾巴浪費被超長序列攤平,佔比最低</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <strong class="tip-h tip-h2">自己調的話</strong>
+              <ul>
+                <li><b>0%</b> —— 理論下限,只在你想知道「絕對最少要多少」時用,別拿來做採購決策</li>
+                <li><b>8%</b> —— 一般 vLLM 穩態</li>
+                <li><b>15–25%</b> —— 長時間運行的服務、負載變異大、頻繁換 LoRA</li>
+              </ul>`,
+
+  "tip.act":`<strong class="tip-h">這三個按鈕做什麼</strong>
+            <dl>
+              <dt>複製 CSV</dt>
+              <dd>把「估算結果」的數據表(模型權重、KV Cache、合計等)複製成試算表格式,可貼進 Excel 或 Google Sheets 繼續分析。</dd>
+              <dt>複製設定碼</dt>
+              <dd>把目前所有設定(模型、精度、上下文、各項參數)壓成一段短字串。傳給同事,對方貼進「載入設定碼」就能看到跟你一樣的完整結果。</dd>
+              <dt>載入設定碼</dt>
+              <dd>貼上別人給的、或自己先前存下的設定碼,一鍵還原整組設定。網址列用 <code>#cfg=…</code> 也能直接帶設定碼,開啟頁面自動還原。</dd>
+            </dl>`,
+
+  "foot":`<strong>計算模型</strong>:總量 = (權重 + KV Cache + 啟動值) ÷ 並行數 + 框架常駐,再乘上碎片化餘裕。<br>
+    權重 = 總參數量 × 每參數位元組(MoE 含全部專家;INT4/INT8/FP8 另計分組量化的 scales 開銷)。<br>
+    <strong>KV Cache 依層別分開計算</strong>:<code>2 × KVheads × headdim × 位元組 × (全注意力層 × 上下文 + 滑窗層 × min(上下文, 視窗)) × 並發</code>。
+    線性注意力層(Mamba / Gated DeltaNet / KDA)狀態固定不隨上下文成長,不計入。MLA 走壓縮路徑 <code>latent × …</code>(不 ×2)。
+    <strong>總層數 ≠ 有 KV 的層數</strong>——2026 的新模型多為混合架構,直接用總層數會高估數倍。<br>
+    <strong>張量並行(TP)</strong>取 2 的冪。GQA 的 KV 最多切到 <code>KV heads</code> 份;<strong>MLA 的 KV 在各卡複製、不隨 TP 遞減</strong>——這是 DeepSeek 類模型常被低估之處。<br>
+    數值以 GiB(2³⁰ bytes)計。<strong>加速卡標稱的「96GB」等容量本身即為 2³⁰ 進位</strong>——顯示記憶體以 2 的冪次顆粒組成,nvidia-smi 對「80GB」H100 回報 81,920 MiB(= 80 GiB),故本表一律以 GiB 標示,未做十進位換算。統一記憶體機種(EdgeXpert/DGX Spark (GB10)、Jetson Thor、RTX Spark (N1x))已扣除 OS/CPU 保留。實際佔用仍會因 vLLM / TensorRT-LLM 的分配策略而異,結果為工程估算而非保證值。模型架構為公開規格參考值,請以官方 config 為準。<br>
+    <strong>電費</strong>= TDP × 負載率 × 8760 小時 × 電價,僅計加速器本身,未含主機、散熱與 PUE。TDP 為典型板卡功耗參考值(統一記憶體機種為整機),實際依 SKU 與散熱設定而異。<br>
+    <strong>4-bit 區塊浮點</strong>:NVFP4 為每 16 個元素共用一個 FP8(E4M3)縮放因子(+12.5%),MXFP4 為每 32 個共用一個 E8M0 縮放因子(+6.25%),故兩者實際佔用不同於純 INT4。
+    劃掉的格式表示該模型目前無公開權重,不可選;NVFP4 另需 Blackwell 世代硬體才有原生加速。`,
+},
+
+/* 英文:P1 完成 UI 骨架(標籤、按鈕、表頭、動態訊息)。
+   長篇技術論述(tip.frag / tip.act / foot / arch.foot 與模型的 t/q 欄位)
+   刻意留白讓它回退到繁中 —— 那是 P2 的翻譯工作,需要領域知識而非機械對譯。
+   用 i18nCoverage() 可列出還缺哪些 key。 */
+"en": {
+  "head.docTitle":"VRAM Calculator",
+  "head.eyebrow":"AI Deployment Capacity Planning",
+  "head.title":"LLM Inference VRAM Calculator",
+  "head.sub":"Enter your model and workload, get a live GPU memory estimate, and see which accelerators it fits on. Accounts for GQA/MLA sharding limits and unified-memory system reserves.",
+
+  "scn.rag.t":"Enterprise RAG / Q&A",
+  "scn.rag.d":"Long retrieval context, moderate concurrency. Mirrors AI-Q / Enterprise RAG blueprints.",
+  "scn.human.t":"Digital Human / Support Chat",
+  "scn.human.d":"Low latency, higher concurrency, moderate context. Mirrors Digital Human blueprints.",
+  "scn.doc.t":"Long Document / Summarization",
+  "scn.doc.d":"Very long context, low-concurrency batch. Mirrors PDF-to-Podcast / extraction blueprints.",
+  "scn.agent.t":"OpenClaw / Hermes Agent",
+  "scn.agent.d":"Both share one configuration, from NVIDIA's DGX Spark agent-ready recipe: Qwen3.6 35B NVFP4 + FP8 KV, 256K context, concurrency 4.",
+
+  "in.title":"Inputs",
+  "in.model":'LLM model <span class="hint">(open-weight releases since gpt-oss, Aug 2025)</span>',
+  "in.showOld":"Show previous-generation models (for comparison)",
+  "in.wprec":'Weight precision / quantization <span class="hint">(Data Format)</span>',
+  "in.ctx":'Context length <span class="hint">(tokens)</span>',
+  "in.ctxCustomAria":"Custom context length (tokens)",
+  "in.users":'Concurrent users <span class="hint">(batch)</span>',
+  "in.kvprec":'KV cache precision <span class="hint">(may differ from weights)</span>',
+  "in.frag":'Fragmentation / headroom <span class="hint">(PagedAttention block alignment, allocator fragmentation)</span>',
+  "in.fragTipAria":"How should I set headroom? Show explanation",
+  "in.rate":'Electricity rate <span class="hint">(per kWh)</span>',
+  "in.util":'Average utilization <span class="hint">(%)</span>',
+
+  "arch.summary":"Model architecture (advanced — editable; defaults are published reference specs)",
+  "arch.params":"Parameters (B)", "arch.layers":"Total layers L", "arch.hidden":"hidden",
+  "arch.lfull":"Full-attn layers", "arch.lfullT":"Layers whose KV grows linearly with context",
+  "arch.lswa":"Sliding layers",   "arch.lswaT":"Sliding-window layers — KV is capped",
+  "arch.win":"Window size",       "arch.winT":"Sliding window size (tokens)",
+  "arch.kvheads":"KV heads", "arch.headdim":"head dim",
+  "arch.latent":"MLA latent", "arch.latentT":"DeepSeek-style compressed KV dimension; >0 switches to the MLA formula",
+  "arch.vocab":"Vocab size", "arch.chunk":"prefill chunk",
+  "arch.chunkT":"Prefill chunk size — sets the activation peak",
+  "arch.current":"Current: ",
+
+  "act.copyCsv":"Copy CSV", "act.copyCfg":"Copy config code", "act.loadCfg":"Load config code",
+  "act.tipAria":"What do these three buttons do? Show explanation",
+
+  "res.title":"Estimate",
+  "res.capInit":"Total memory required per GPU",
+  "res.legendOh":"Framework + headroom",
+  "res.gpuTitle":"Accelerator Fit",
+  "res.recTitle":"Recommended Configuration · Running Costs",
+  "mem.unified":"Unified memory",
+
+  "gpu.th.card":"Accelerator", "gpu.th.usable":"Usable", "gpu.th.tp":"Tensor parallel",
+  "gpu.th.cost":"Annual power cost", "gpu.th.status":"Status",
+  "gpu.single":"Fits on one",
+  "gpu.multi": n => `${n}× parallel`,
+  "gpu.over":  maxN => `Exceeds ${maxN}× limit`,
+
+  "bd.weight":"Model weights", "bd.act":"Activations", "bd.oh":"Framework + headroom", "bd.total":"Total",
+  "bd.qoh":    pct => `(incl. ${pct}% quantization overhead)`,
+  "bd.kvSub":  (users, ctx, cap) => `(${users} concurrent × ${ctx} ctx${cap ? ` · window-capped at ${cap}` : ""})`,
+  "bd.actSub": chunk => `(chunk ${chunk})`,
+  "bd.ohSub":  pct => `(${pct}% fragmentation)`,
+
+  "res.cap": (path, Lf, Lsw, lin) => `Total per GPU (TP=1) · ${path} path · ${Lf} full-attn KV layers`
+    + (Lsw ? ` + ${Lsw} sliding` : "") + (lin ? ` + ${lin} linear layers excluded` : ""),
+  "res.perUser": v => `KV per user ≈ ${v} GiB`,
+
+  "note.single": (name, usable) => `Smallest single-card fit: <strong>${name}</strong> (${usable} GiB usable).`,
+  "note.multi":  (n, name) => `No single-card option; smallest viable is <strong>${n}× ${name}</strong>.`,
+  "note.none":"Nothing on this list can hold it — lower the precision, concurrency, or context.",
+  "note.mla":"This model uses MLA, so its KV cache is <strong>replicated on every GPU rather than sharded</strong> — adding cards only thins out the weights. To shrink KV, reduce concurrency or context.",
+  "note.kvHigh": pct => `KV cache dominates (${pct}%) — switching to <code>FP8</code> KV nearly halves it.`,
+  "note.weightDom":"Weights dominate — lowering weight precision (FP8 / INT4) helps most.",
+
+  "rec.config":"Configuration", "rec.perCard":"Per GPU", "rec.headroom":"Headroom",
+  "rec.peakW":"Peak power", "rec.kwh":"Annual energy", "rec.cost":"Annual cost",
+  "rec.none":"No viable configuration, so power and cost are not estimated.",
+
+  "warn.prefix":"⚠ ", "warn.join":"; ",
+  "warn.layerConflict": (sum, L) => `Full-attention + sliding layers (${sum}) exceed total layers L (${L}) — the layer counts contradict each other`,
+  "warn.swNoWin": Lsw => `${Lsw} sliding layers are set but the window size is 0 → their KV counts as zero, which is probably not what you want`,
+
+  "msg.custom":"Custom",
+  "msg.unconfirmed":"⚠ Unverified: ",
+  "msg.srcFrom":"Spec source: ",
+  "msg.srcNone":"Spec source: no official public weights — architecture is estimated",
+  "msg.noWeights": label => `No public ${label} weights for this model`,
+  "msg.copyFail":"Copy failed — please select manually",
+  "msg.csvCopied":"CSV copied to clipboard",
+  "msg.cfgCopied":"Config code copied",
+  "msg.cfgLoaded":"Configuration loaded",
+  "msg.cfgBad":"Could not parse that config code",
+  "msg.paste":"Paste a config code and press Enter",
+
+  "csv.item":"Item", "csv.value":"Value", "csv.model":"Model", "csv.wprec":"Weight precision",
+  "csv.kvprec":"KV precision", "csv.ctx":"Context", "csv.users":"Concurrency",
+  "csv.memItem":"Memory component", "csv.infeasible":"not viable",
+
+  "ctx.custom":"Custom…",
+  "theme.dark":"Dark", "theme.light":"Light",
+  "theme.aria": to => `Switch to ${to} theme`,
+
+  /* 資料層字串覆寫。key 對應 MODELS / GPUS / CTX_OPTIONS 裡的原文,
+     資料陣列本身完全不必改動(見 TD())。 */
+  "grp.A":"64GB local", "grp.B":"128GB class", "grp.C":"Data centre",
+  "grp.old":"Previous generation (for comparison)",
+
+  "ctx.g.對話 / 助理":"Chat / Assistant",
+  "ctx.g.檢索 / 知識問答":"Retrieval / Q&A",
+  "ctx.g.Agent 最低需求":"Agent — minimum required",
+  "ctx.g.Agent 實機配方":"Agent — tested recipes",
+  "ctx.g.長文件處理":"Long documents",
+  "ctx.g.程式開發":"Software development",
+
+  "ctx.t.chat-2k":"2K — single-turn Q&A · form filling",
+  "ctx.t.chat-4k":"4K — digital human · live support chat",
+  "ctx.t.chat-8k":"8K — general chat assistant",
+  "ctx.t.rag-16k":"16K — enterprise RAG, single retrieval",
+  "ctx.t.rag-32k":"32K — RAG + multi-turn history",
+  "ctx.t.agent-32k":"32K — OpenClaw",
+  "ctx.t.agent-64k":"64K — Hermes Agent",
+  "ctx.t.agent-128k":"128K — long sessions · multi-tool chains",
+  "ctx.t.agent-256k":"256K — DGX Spark (official NVIDIA playbook)",
+  "ctx.t.doc-128k":"128K — long documents · full contract summary",
+  "ctx.t.doc-256k":"256K — multi-document comparison · very long reports",
+  "ctx.t.code-128k":"128K — single feature module",
+  "ctx.t.code-256k":"256K — cross-file refactor · large repo navigation",
+  "ctx.t.code-1m":"1M — whole-codebase scale",
+
+  "g.RTX Spark (N1x).tag":"Unified memory · up to 128 GiB",
+  "g.Jetson AGX Thor.tag":"Unified memory",
+  "g.EdgeXpert / DGX Spark (GB10).tag":"Unified memory",
+},
+};
+
+// 語系決定順序:?lang= → localStorage → 瀏覽器語言 → zh-TW
+const LS_KEY = "vram.lang";
+const pickLocale = c => {
+  if (!c) return null;
+  c = c.toLowerCase();
+  return LOCALES.find(l => l.id.toLowerCase() === c)
+      || LOCALES.find(l => c.split("-")[0] === l.id.toLowerCase().split("-")[0]);
+};
+const store = {
+  get(){ try { return localStorage.getItem(LS_KEY); } catch { return null; } },
+  set(v){ try { localStorage.setItem(LS_KEY, v); } catch {} },
+};
+let LOCALE = (pickLocale(new URLSearchParams(location.search).get("lang"))
+           || pickLocale(store.get())
+           || pickLocale(navigator.language)
+           || LOCALES[0]).id;
+
+/* 取字串。dflt 讓資料陣列(模型 t/q、GPU tag、ctx 標籤)可以把繁中原文留在原地,
+   其他語系再用 key 覆寫,資料層因此完全不必為了 i18n 改動。 */
+function T(key, ...args){
+  const v = Tmaybe(key);
+  if (v === undefined) return args.length === 1 && typeof args[0] === "string" ? args[0] : key;
+  return typeof v === "function" ? v(...args) : v;
+}
+// 兩本字典都查不到就回 undefined —— applyI18n 靠這個判斷「跳過」而非清空 DOM
+const Tmaybe = key => DICT[LOCALE]?.[key] ?? DICT["zh-TW"][key];
+// 帶預設值的變體:給資料層用,查不到 key 就用原文
+const TD = (key, dflt) => DICT[LOCALE]?.[key] ?? (LOCALE === "zh-TW" ? dflt : DICT["zh-TW"][key] ?? dflt);
+/* 開發用:列出某語系還缺哪些 key。
+   應翻清單 = zh-TW 字典的 key ∪ 資料層 key(模型 t/q、GPU tag、ctx 分組與標籤)。
+   資料層的繁中原文留在各自陣列裡,不重複寫進字典,所以要在這裡補算回來,
+   否則 P2/P3 會誤以為「字典翻完 = 全部翻完」。 */
+function i18nCoverage(loc = LOCALE){
+  const dataKeys = [
+    ...MODELS.flatMap(m => [`m.${m.id}.t`, ...(m.q ? [`m.${m.id}.q`] : [])]),
+    ...GPUS.filter(g => /[一-龥]/.test(g.tag)).map(g => `g.${g.name}.tag`),
+    ...Object.keys(GRP_LABEL).map(k => `grp.${k}`),
+    ...[...new Set(CTX_OPTIONS.map(o => o.g))].map(g => `ctx.g.${g}`),
+    ...CTX_OPTIONS.map(o => `ctx.t.${o.id}`),
+  ];
+  const base = [...new Set([...Object.keys(DICT["zh-TW"]), ...dataKeys])];
+  const have = k => loc === "zh-TW" || DICT[loc]?.[k] !== undefined;
+  const missing = base.filter(k => !have(k));
+  return {locale: loc, total: base.length, translated: base.length - missing.length, missing};
+}
+
 /* 模型資料。關鍵:L=總層數,Lf=全注意力層數(KV 隨上下文成長),
    Lsw=滑動視窗層數(KV 上限 win),其餘層為線性注意力(Mamba/DeltaNet,KV 可忽略)。
    lat>0 表示 MLA 壓縮路徑,此時 Lf 為 MLA 層數。
@@ -595,7 +947,7 @@ function buildModelList(){
   msel.replaceChildren(new Option(MODELS[0].name, "custom"));
   ["A", "B", "C", ...(showOld ? ["old"] : [])].forEach(g => {
     const og = document.createElement("optgroup");
-    og.label = GRP_LABEL[g];
+    og.label = TD(`grp.${g}`, GRP_LABEL[g]);
     MODELS.filter(m => m.grp === g && m.id !== "custom")
       .forEach(m => og.append(new Option(m.name, m.id)));
     msel.append(og);
@@ -608,18 +960,21 @@ msel.value = "qwen38-27b";
 
 const ctxSel = $("ctx");
 function buildCtxList(){
+  const keep = ctxSel.value;               // 換語系會重建選單,選取項必須保住
   ctxSel.replaceChildren();
   let og = null, lastG = null;
   CTX_OPTIONS.forEach(o => {
+    // 分組比較用「原文」而非譯文:譯文可能讓相鄰兩組看起來相同而被合併
     if (o.g !== lastG){
       og = document.createElement("optgroup");
-      og.label = o.g;
+      og.label = TD(`ctx.g.${o.g}`, o.g);
       ctxSel.append(og);
       lastG = o.g;
     }
-    og.append(new Option(o.t, o.id));
+    og.append(new Option(TD(`ctx.t.${o.id}`, o.t), o.id));
   });
-  ctxSel.append(new Option("自訂…", "custom"));
+  ctxSel.append(new Option(T("ctx.custom"), "custom"));
+  if (keep && [...ctxSel.options].some(o => o.value === keep)) ctxSel.value = keep;
 }
 buildCtxList();
 // 資料層斷言:每個範本引用的 ctx id 都必須存在,否則點範本會靜默套不上值。
@@ -662,7 +1017,7 @@ function buildSeg(el, items, key){
     b.textContent = it.label;
     if (key === "wprec" && !fp4Ok(msel.value, it.id)){
       b.disabled = true;
-      b.title = `此模型無公開的 ${it.label} 權重`;
+      b.title = T("msg.noWeights", it.label);
     }
     b.setAttribute("aria-pressed", String(state[key] === it.id));
     b.onclick = () => {
@@ -690,21 +1045,21 @@ function applyModel(id){
     $("kvheads").value = m.kvh; $("headdim").value = m.hd;
     $("latent").value = m.lat; $("vocab").value = m.v;
   }
-  $("attnBadge").textContent = m.t;
+  $("attnBadge").textContent = TD(`m.${m.id}.t`, m.t);
   setSrcLink(m);
-  $("qFlag").textContent = m.q ? "⚠ 未確認:" + m.q : "";
+  $("qFlag").textContent = m.q ? T("msg.unconfirmed") + TD(`m.${m.id}.q`, m.q) : "";
   normalizeWprec();
 }
 // 規格來源可追溯:架構數值應能回推到某個 config.json。無 src 者明講「無官方權重」而非留白。
 function setSrcLink(m){
   const el = $("srcLink");
   if (m.src){
-    el.innerHTML = `規格來源:<a href="https://huggingface.co/${m.src}/blob/main/config.json"
+    el.innerHTML = `${T("msg.srcFrom")}<a href="https://huggingface.co/${m.src}/blob/main/config.json"
       target="_blank" rel="noopener noreferrer" style="color:var(--accent)">${m.src}</a> ↗`;
   } else if (m.id === "custom"){
     el.textContent = "";
   } else {
-    el.innerHTML = `<span style="color:var(--text-3)">規格來源:無官方公開權重,架構為推估值</span>`;
+    el.innerHTML = `<span style="color:var(--text-3)">${T("msg.srcNone")}</span>`;
   }
 }
 msel.onchange = () => { applyModel(msel.value); calc(); };
@@ -741,7 +1096,7 @@ const ARCH_IDS = ["params","layers","hidden","lfull","lswa","win","kvheads","hea
   $(id).addEventListener("input", () => {
     if (ARCH_IDS.includes(id)){
       msel.value = "custom";
-      $("attnBadge").textContent = "自訂";
+      $("attnBadge").textContent = T("msg.custom");
       $("srcLink").textContent = "";   // 已偏離內建規格,來源連結不再成立
       $("qFlag").textContent = "";
       normalizeWprec(); // custom 對 FP4 的支援與前一個模型不同,按鈕須重新渲染
@@ -778,9 +1133,9 @@ function calc(){
 
   // 邊界防呆:兩個容易手誤又不會讓公式報錯、但結果會失真的輸入組合
   const warnings = [];
-  if (Lf + Lsw > L) warnings.push(`全注意力層 + 滑窗層(${Lf + Lsw})超過總層數 L(${L}),層數設定互相矛盾`);
-  if (Lsw > 0 && win <= 0) warnings.push(`已設定 ${Lsw} 個滑窗層,但視窗大小為 0 → 這些層的 KV 會被當成 0,可能不是你要的結果`);
-  $("archWarn").textContent = warnings.length ? "⚠ " + warnings.join("；") : "";
+  if (Lf + Lsw > L) warnings.push(T("warn.layerConflict", Lf + Lsw, L));
+  if (Lsw > 0 && win <= 0) warnings.push(T("warn.swNoWin", Lsw));
+  $("archWarn").textContent = warnings.length ? T("warn.prefix") + warnings.join(T("warn.join")) : "";
 
   // 啟動值:prefill 分塊的層間工作緩衝 + logits 緩衝(不隨層數累加,逐層重用)
   const actB = chunk * h * 2 * ACT_FACTOR + users * vocab * 4;
@@ -801,11 +1156,8 @@ function calc(){
   const tG = perGPU(1) / GiB;
 
   $("totalGB").innerHTML = fmt(tG) + "<small>GiB</small>";
-  $("totalCap").textContent = `單卡(TP=1)所需總記憶體 · ${isMLA ? "MLA" : "GQA/MHA"} 路徑`
-    + ` · KV 層 ${Lf} 全注意力`
-    + (Lsw ? ` + ${Lsw} 滑窗` : "")
-    + (linearL ? ` + ${linearL} 線性層不計` : "");
-  $("perUser").textContent = "每用戶 KV ≈ " + fmt(kvB / users / GiB) + " GiB";
+  $("totalCap").textContent = T("res.cap", isMLA ? "MLA" : "GQA/MHA", Lf, Lsw, linearL);
+  $("perUser").textContent = T("res.perUser", fmt(kvB / users / GiB));
 
   const segs = [["--w-weight", wG], ["--w-kv", kvG], ["--w-act", aG], ["--w-oh", oG]];
   $("bar").replaceChildren(...segs.map(([c, v]) => {
@@ -818,11 +1170,12 @@ function calc(){
   const row = (color, name, sub, val) =>
     `<tr><td class="nm"><span class="dot" style="background:var(${color})"></span>${name}${sub ? ` <span style="color:var(--text-3);font-size:.85em">${sub}</span>` : ""}</td><td>${fmt(val)} GiB</td></tr>`;
   $("bd").innerHTML =
-    row("--w-weight", "模型權重", wp.qoh ? `(含 ${Math.round(wp.qoh*100)}% 量化開銷)` : "", wG) +
-    row("--w-kv", "KV Cache", `(${users} 並發 × ${ctx.toLocaleString()} ctx${Lsw && swTok < ctx ? ` · 滑窗封頂 ${swTok.toLocaleString()}` : ""})`, kvG) +
-    row("--w-act", "啟動值", `(chunk ${chunk.toLocaleString()})`, aG) +
-    row("--w-oh", "框架常駐 + 餘裕", `(${fragPct}% 碎片化)`, oG) +
-    `<tr><td class="nm">合計</td><td>${fmt(tG)} GiB</td></tr>`;
+    row("--w-weight", T("bd.weight"), wp.qoh ? T("bd.qoh", Math.round(wp.qoh*100)) : "", wG) +
+    row("--w-kv", "KV Cache", T("bd.kvSub", users, ctx.toLocaleString(LOCALE),
+        Lsw && swTok < ctx ? swTok.toLocaleString(LOCALE) : null), kvG) +
+    row("--w-act", T("bd.act"), T("bd.actSub", chunk.toLocaleString(LOCALE)), aG) +
+    row("--w-oh", T("bd.oh"), T("bd.ohSub", fragPct), oG) +
+    `<tr><td class="nm">${T("bd.total")}</td><td>${fmt(tG)} GiB</td></tr>`;
 
   // GPU 落點:TP 取 2 的冪
   const rate = num("rate", 3.5), util = num("util", 70) / 100;
@@ -837,8 +1190,8 @@ function calc(){
     }
     if (n) fits.push({g, n, usable});
     const cls = !n ? "over" : n === 1 ? "ok" : "warn";
-    const txt = !n ? `超出 ${g.maxN}× 上限` : n === 1 ? "單卡可容" : `${n}× 並行`;
-    return `<tr><td class="name mem-${g.mem}">${g.name}<br><span class="tagline">${g.tag}</span></td>`
+    const txt = !n ? T("gpu.over", g.maxN) : n === 1 ? T("gpu.single") : T("gpu.multi", n);
+    return `<tr><td class="name mem-${g.mem}">${g.name}<br><span class="tagline">${TD(`g.${g.name}.tag`, g.tag)}</span></td>`
       + `<td class="vram">${g.vram} GiB</td><td class="vram">${usable} GiB</td>`
       + `<td>${n ? n + "×" : "—"}</td>`
       + `<td class="vram">${n ? money(yearlyCost(g) * n) : "—"}</td>`
@@ -849,15 +1202,15 @@ function calc(){
   // 推薦以「卡數少」優先,同卡數再取總 VRAM 較小者
   const multi = [...fits].sort((a, b) => a.n - b.n || a.n * a.g.vram - b.n * b.g.vram)[0];
   const tip = isMLA
-    ? "此模型走 MLA,KV Cache 在張量並行下<strong>各卡複製而不遞減</strong>,加卡只攤薄權重。要壓 KV 請降並發或上下文。"
+    ? T("note.mla")
     : kvG > wG * .5
-      ? `KV Cache 佔比偏高(${Math.round(kvG/tG*100)}%),改用 <code>FP8</code> KV 可省近半。`
-      : "權重為主要開銷,降低權重精度(FP8 / INT4)最有效。";
+      ? T("note.kvHigh", Math.round(kvG/tG*100))
+      : T("note.weightDom");
   $("note").innerHTML = (single
-    ? `最小可單卡容納者為 <strong>${single.g.name}</strong>(可用 ${single.usable} GiB)。`
+    ? T("note.single", single.g.name, single.usable)
     : multi
-      ? `無單卡方案;最小可行為 <strong>${multi.n}× ${multi.g.name}</strong>。`
-      : "清單中無任何配置可容納,請降低精度、並發或上下文。") + " " + tip;
+      ? T("note.multi", multi.n, multi.g.name)
+      : T("note.none")) + " " + tip;
 
   // 推薦配置的營運估算
   const best = single || multi;
@@ -866,20 +1219,20 @@ function calc(){
     const headroom = best.usable - perGPU(best.n) / GiB;
     const cell = (k, v, u) => `<div class="cell"><div class="k">${k}</div><div class="v">${v}${u ? `<small>${u}</small>` : ""}</div></div>`;
     $("rec").innerHTML =
-      cell("配置", `${best.n}×`, best.g.name.split(" ")[0] === "EdgeXpert" ? "EdgeXpert" : best.g.name.replace(/ Blackwell| \(GB10\)/, "")) +
-      cell("每卡佔用", fmt(perGPU(best.n) / GiB), "GiB") +
-      cell("餘裕", fmt(Math.max(headroom, 0)), "GiB") +
-      cell("尖峰功耗", watt.toLocaleString(), "W") +
-      cell("年耗電", Math.round(kwh).toLocaleString(), "kWh") +
-      cell("年電費", money(kwh * rate), "");
+      cell(T("rec.config"), `${best.n}×`, best.g.name.split(" ")[0] === "EdgeXpert" ? "EdgeXpert" : best.g.name.replace(/ Blackwell| \(GB10\)/, "")) +
+      cell(T("rec.perCard"), fmt(perGPU(best.n) / GiB), "GiB") +
+      cell(T("rec.headroom"), fmt(Math.max(headroom, 0)), "GiB") +
+      cell(T("rec.peakW"), watt.toLocaleString(LOCALE), "W") +
+      cell(T("rec.kwh"), Math.round(kwh).toLocaleString(LOCALE), "kWh") +
+      cell(T("rec.cost"), money(kwh * rate), "");
   } else {
-    $("rec").innerHTML = `<p class="none">尚無可行配置,故不估算功耗與電費。</p>`;
+    $("rec").innerHTML = `<p class="none">${T("rec.none")}</p>`;
   }
 
   lastSnapshot = {
     model: msel.selectedOptions[0].textContent, wprec: wp.label,
     kvprec: KVPREC.find(x => x.id === state.kvprec).label,
-    ctx, users, rows: [["模型權重", wG], ["KV Cache", kvG], ["啟動值", aG], ["框架常駐+餘裕", oG], ["合計", tG]],
+    ctx, users, rows: [[T("bd.weight"), wG], ["KV Cache", kvG], [T("bd.act"), aG], [T("bd.oh"), oG], [T("bd.total"), tG]],
     gpus: GPUS.map(g => {
       const f = fits.find(x => x.g === g);
       return [g.name, g.vram, g.vram - g.res, f ? f.n : 0, f ? Math.round(yearlyCost(g) * f.n) : 0];
@@ -899,7 +1252,7 @@ async function copyText(text, okMsg){
     document.body.appendChild(ta); ta.select();
     const ok = document.execCommand("copy");
     ta.remove();
-    if (!ok) return flash("複製失敗,請手動選取", true);
+    if (!ok) return flash(T("msg.copyFail"), true);
   }
   flash(okMsg);
 }
@@ -923,7 +1276,7 @@ const cfgEncode = () => {
 function cfgApply(code){
   let o;
   try{ o = JSON.parse(decodeURIComponent(escape(atob(code.trim())))); }
-  catch{ return flash("設定碼無法解析", true); }
+  catch{ return flash(T("msg.cfgBad"), true); }
   if (o.m && MODELS.some(m => m.id === o.m)){
     const tgt = MODELS.find(m => m.id === o.m);
     if (tgt.grp === "old" && !$("showOld").checked){ $("showOld").checked = true; buildModelList(); }
@@ -936,9 +1289,9 @@ function cfgApply(code){
   CFG_IDS.forEach(id => { if (o[id] !== undefined) $(id).value = o[id]; });
   if (o.ctx !== undefined && isFinite(+o.ctx)) setCtx(+o.ctx);
   clearScn();
-  if (o.m === "custom"){ $("attnBadge").textContent = "自訂"; $("srcLink").textContent = ""; }
+  if (o.m === "custom"){ $("attnBadge").textContent = T("msg.custom"); $("srcLink").textContent = ""; }
   calc();
-  flash("設定已載入");
+  flash(T("msg.cfgLoaded"));
 }
 
 $("copyCsv").onclick = () => {
@@ -946,19 +1299,20 @@ $("copyCsv").onclick = () => {
   if (!s) return;
   const esc = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
   const lines = [
-    ["項目", "值"], ["模型", s.model], ["權重精度", s.wprec], ["KV 精度", s.kvprec],
-    ["上下文", s.ctx], ["並發", s.users], [],
-    ["記憶體項目", "GiB"], ...s.rows.map(r => [r[0], fmt(r[1])]), [],
-    ["加速卡", "VRAM(GiB)", "可用(GiB)", "張量並行", "年電費"],
-    ...s.gpus.map(g => [g[0], g[1], g[2], g[3] ? g[3] + "x" : "不可行", g[4] || ""]),
+    [T("csv.item"), T("csv.value")], [T("csv.model"), s.model],
+    [T("csv.wprec"), s.wprec], [T("csv.kvprec"), s.kvprec],
+    [T("csv.ctx"), s.ctx], [T("csv.users"), s.users], [],
+    [T("csv.memItem"), "GiB"], ...s.rows.map(r => [r[0], fmt(r[1])]), [],
+    [T("gpu.th.card"), "VRAM(GiB)", `${T("gpu.th.usable")}(GiB)`, T("gpu.th.tp"), T("gpu.th.cost")],
+    ...s.gpus.map(g => [g[0], g[1], g[2], g[3] ? g[3] + "x" : T("csv.infeasible"), g[4] || ""]),
   ];
-  copyText("﻿" + lines.map(l => l.map(esc).join(",")).join("\n"), "CSV 已複製到剪貼簿");
+  copyText("﻿" + lines.map(l => l.map(esc).join(",")).join("\n"), T("msg.csvCopied"));
 };
-$("copyCfg").onclick = () => copyText(cfgEncode(), "設定碼已複製");
+$("copyCfg").onclick = () => copyText(cfgEncode(), T("msg.cfgCopied"));
 $("loadCfg").onclick = () => {
   const box = document.createElement("input");
   box.type = "text";
-  box.placeholder = "貼上設定碼後按 Enter";
+  box.placeholder = T("msg.paste");
   box.style.cssText = "flex:1 1 180px;font-size:.8rem;padding:6px 10px";
   box.onkeydown = e => {
     if (e.key === "Enter"){ cfgApply(box.value); box.remove(); }
@@ -980,8 +1334,8 @@ const isDark = () => {
 function syncThemeBtn(){
   const dark = isDark();
   $("themeIcon").textContent = dark ? "☾" : "☀";
-  $("themeTxt").textContent = dark ? "深色" : "淺色";
-  $("themeBtn").setAttribute("aria-label", `切換至${dark ? "淺色" : "深色"}主題`);
+  $("themeTxt").textContent = dark ? T("theme.dark") : T("theme.light");
+  $("themeBtn").setAttribute("aria-label", T("theme.aria", dark ? T("theme.light") : T("theme.dark")));
 }
 $("themeBtn").onclick = () => {
   document.documentElement.setAttribute("data-theme", isDark() ? "light" : "dark");
@@ -1012,7 +1366,58 @@ document.querySelectorAll(".tipbtn").forEach(btn => {
   btn.addEventListener("focus", place);
 });
 
-calc();
+/* ---------- 套用語系 ----------
+   靜態文案吃 data-i18n / data-i18n-html / data-i18n-attr;
+   動態產生的 UI(模型選單、上下文選單、精度按鈕、結果區)一律重建。
+   重建順序要跟啟動時一致:選單 → 模型 → 精度按鈕 → calc()。 */
+function applyI18n(){
+  const loc = LOCALES.find(l => l.id === LOCALE) || LOCALES[0];
+  document.documentElement.lang = LOCALE;
+  document.documentElement.style.setProperty("--cjk-font", loc.font || "sans-serif");
+  document.title = T("head.docTitle");
+
+  // 缺 key 一律「跳過」,保留 HTML 裡的原文。否則漏寫一個 key 就會把整段內容
+  // 換成裸 key 字串(P1 實際踩過:頁尾整段變成 "foot")。
+  const missing = [];
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const v = Tmaybe(el.dataset.i18n);
+    if (v === undefined) return missing.push(el.dataset.i18n);
+    el.textContent = typeof v === "function" ? v() : v;
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach(el => {
+    const v = Tmaybe(el.dataset.i18nHtml);
+    if (v === undefined) return missing.push(el.dataset.i18nHtml);
+    el.innerHTML = typeof v === "function" ? v() : v;
+  });
+  document.querySelectorAll("[data-i18n-attr]").forEach(el => {
+    el.dataset.i18nAttr.split(";").forEach(pair => {
+      const i = pair.indexOf(":");
+      if (i < 0) return;
+      const key = pair.slice(i + 1).trim();
+      if (Tmaybe(key) === undefined) return missing.push(key);
+      el.setAttribute(pair.slice(0, i).trim(), T(key));
+    });
+  });
+  if (missing.length) console.warn("[i18n] 字典缺少 key,已保留原文:", [...new Set(missing)]);
+
+  buildModelList();
+  buildCtxList();
+  applyModel(msel.value);          // 內含 normalizeWprec() → 重建權重精度按鈕
+  buildSeg($("kvprec"), KVPREC, "kvprec");
+  syncThemeBtn();
+  calc();
+}
+
+const langSel = $("lang");
+langSel.replaceChildren(...LOCALES.map(l => new Option(l.name, l.id)));
+langSel.value = LOCALE;
+langSel.onchange = () => {
+  LOCALE = langSel.value;
+  store.set(LOCALE);
+  applyI18n();
+};
+
+applyI18n();
 // 獨立網址使用時,#cfg=... 可直接還原情境(Artifact 內請改用「載入設定碼」)
 if (location.hash.startsWith("#cfg=")) cfgApply(location.hash.slice(5));
 </script>

@@ -165,7 +165,8 @@ async function checkKeyboard(page, tip) {
     // 外部字型與版面驗證無關,擋掉以免受網路狀況影響
     await page.route("**/fonts.googleapis.com/**", r => r.abort());
     await page.route("**/fonts.gstatic.com/**", r => r.abort());
-    await page.goto(`${base}/index.html`, { waitUntil: "load", timeout: 20000 });
+    // ?lang=zh-TW:版面測試量的是中文字寬,語系必須釘死才有可比性
+    await page.goto(`${base}/index.html?lang=zh-TW`, { waitUntil: "load", timeout: 20000 });
 
     for (const tip of TIPS) await checkTip(page, tip, vw, vh);
     for (const tip of TIPS) await checkAutoFlip(page, tip, vw, vh);

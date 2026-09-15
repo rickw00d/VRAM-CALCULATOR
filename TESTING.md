@@ -236,6 +236,34 @@ console.log({溢出:de.scrollWidth>de.clientWidth, 寬度:`${de.clientWidth}/${d
 - [ ] `年電費` 欄位金額 ≥ 1,000,000 時要用 `X.XXM` 格式顯示,而非全部位數
 - [ ] 無任何配置可容納時,推薦配置卡片要顯示「尚無可行配置」而非空白或報錯
 
+## 11. 多國語言(i18n)
+
+自動化測試 29 項:`npm run test:i18n`(全套為 `npm run test:all`)。
+
+**所有既有測試都必須釘住語系。** jsdom 的 `navigator.language` 是 `en-US`,
+不帶 `?lang=zh-TW` 就會自動切英文,底下所有中文斷言全垮。
+`ctx-test.js` 用 `url: "http://localhost/?lang=zh-TW"`,`visual.js` 用 `index.html?lang=zh-TW`。
+
+```js
+// 覆蓋率:列出某語系還缺哪些 key(含資料層的模型描述、GPU tag、ctx 標籤)
+console.log(i18nCoverage('en'));
+```
+
+- [ ] 語系決定優先序:`?lang=` → `localStorage` → `navigator.language` → `zh-TW`
+- [ ] **關鍵回歸點**:切換語系後「數值」不得改變,只有標籤改變。
+      `lastSnapshot.rows` 的 key 會跟著語系走(繁中 `模型權重` / 英文 `Model weights`),
+      測試若要取值須用對應語系的標籤
+- [ ] 切換語系要保留:模型選取、上下文選取、範本的 `aria-pressed` 狀態
+- [ ] `<html lang>` 與 `--cjk-font` 要跟著語系變(TC/SC/JP 共用漢字字形不同,套錯會彆扭)
+- [ ] **已脫離 quirks mode**:`document.compatMode === "CSS1Compat"`。
+      檔案開頭的 `<!doctype html>` 不可刪 —— 拿掉會退回 `BackCompat`
+- [ ] **缺 key 必須保留原文而非清空**:`applyI18n()` 查不到 key 時會跳過該元素並
+      `console.warn`。P1 踩過的 bug:`data-i18n-html="foot"` 標了但字典沒這個 key,
+      整段頁尾被覆蓋成裸字串 `foot`(1,331 字變 4 字)
+- [ ] 畫面上不得出現裸 key(如 `head.title`)。注意 `body.textContent` 在 jsdom
+      會含 `<script>` 原始碼,掃到的會是字典自己的 key —— 必須只掃元素的文字子節點
+- [ ] 上下文選單分組比較用「原文 `o.g`」而非譯文;譯文可能讓相鄰兩組看起來相同而被合併
+
 ---
 
 ## 已知限制(非 bug,設計如此)

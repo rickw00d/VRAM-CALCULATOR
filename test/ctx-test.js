@@ -12,7 +12,9 @@ vc.on("jsdomError", e => errors.push("jsdomError: " + e.message));
 vc.on("error", (...a) => errors.push("console.error: " + a.join(" ")));
 
 const dom = new JSDOM(html, { runScripts: "dangerously", virtualConsole: vc,
-  pretendToBeVisual: true, url: "http://localhost/",
+  // 語系必須釘死:jsdom 的 navigator.language 是 en-US,不釘會讓頁面自動切英文,
+  // 底下所有中文斷言就全垮。測 i18n 本身時改帶 ?lang=en。
+  pretendToBeVisual: true, url: "http://localhost/?lang=zh-TW",
   // jsdom 未實作 matchMedia,補一個 stub(真實瀏覽器有,非頁面缺陷)
   beforeParse(win){
     win.matchMedia = q => ({
