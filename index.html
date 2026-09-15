@@ -268,6 +268,7 @@
         <div class="field">
           <label id="wprecLbl" data-i18n-html="in.wprec">權重精度 / 量化格式 <span class="hint">(Data Format)</span></label>
           <div class="seg" id="wprec" role="group" aria-labelledby="wprecLbl"></div>
+          <div id="wprecNote" role="status" style="font-size:.74rem;color:var(--warn);margin-top:5px"></div>
         </div>
 
         <div class="row">
@@ -501,6 +502,8 @@ const DICT = {
 
   "gpu.th.card":"加速卡", "gpu.th.usable":"可用", "gpu.th.tp":"張量並行",
   "gpu.th.cost":"年電費", "gpu.th.status":"狀態",
+  "gpu.noFp4":"無 FP4,以 FP8 計",
+  "msg.precFallback": (pref, eff) => `此模型無 ${pref} 權重,改以 ${eff} 計算`,
   "gpu.single":"單卡可容",
   "gpu.multi": n => `${n}× 並行`,
   "gpu.over":  maxN => `超出 ${maxN}× 上限`,
@@ -653,6 +656,8 @@ const DICT = {
 
   "gpu.th.card":"加速卡", "gpu.th.usable":"可用", "gpu.th.tp":"张量并行",
   "gpu.th.cost":"年电费", "gpu.th.status":"状态",
+  "gpu.noFp4":"无 FP4,按 FP8 计",
+  "msg.precFallback": (pref, eff) => `该模型没有 ${pref} 权重,改按 ${eff} 计算`,
   "gpu.single":"单卡可容纳",
   "gpu.multi": n => `${n}× 并行`,
   "gpu.over":  maxN => `超出 ${maxN}× 上限`,
@@ -869,6 +874,8 @@ const DICT = {
 
   "gpu.th.card":"アクセラレータ", "gpu.th.usable":"使用可能", "gpu.th.tp":"テンソル並列",
   "gpu.th.cost":"年間電気代", "gpu.th.status":"判定",
+  "gpu.noFp4":"FP4 非対応・FP8 換算",
+  "msg.precFallback": (pref, eff) => `このモデルに ${pref} のウェイトがないため、${eff} で計算しています`,
   "gpu.single":"1 枚に収まる",
   "gpu.multi": n => `${n}× 並列`,
   "gpu.over":  maxN => `${maxN}× の上限を超過`,
@@ -1083,6 +1090,8 @@ const DICT = {
 
   "gpu.th.card":"Accelerator", "gpu.th.usable":"Usable", "gpu.th.tp":"Tensor parallel",
   "gpu.th.cost":"Annual power cost", "gpu.th.status":"Status",
+  "gpu.noFp4":"no FP4, counted as FP8",
+  "msg.precFallback": (pref, eff) => `No ${pref} weights for this model — calculated as ${eff}`,
   "gpu.single":"Fits on one",
   "gpu.multi": n => `${n}× parallel`,
   "gpu.over":  maxN => `Exceeds ${maxN}× limit`,
@@ -1412,8 +1421,10 @@ const GPUS = [
   {name:"RTX Spark (N1x)", vram:64, tag:"統一記憶體 · 最高 128 GiB", res:8, maxN:2, tdp:170, mem:"unified"},
   {name:"Jetson AGX Thor", vram:128, tag:"統一記憶體", res:12, maxN:2, tdp:130, mem:"unified"},
   {name:"EdgeXpert / DGX Spark (GB10)", vram:128, tag:"統一記憶體", res:12, maxN:2, tdp:240, mem:"unified"},
-  {name:"H100", vram:80, tag:"HBM3", res:2, maxN:8, tdp:700, mem:"hbm"},
-  {name:"H200", vram:141, tag:"HBM3e", res:3, maxN:8, tdp:700, mem:"hbm"},
+  // fp4:false = Hopper 世代。FP8 是 Hopper 的精度上限,第二代 Transformer Engine
+  // 才加入 FP4,所以 H100/H200 都跑不了 NVFP4/MXFP4 —— 選 FP4 時這兩列改以 FP8 計算。
+  {name:"H100", vram:80, tag:"HBM3", res:2, maxN:8, tdp:700, mem:"hbm", fp4:false},
+  {name:"H200", vram:141, tag:"HBM3e", res:3, maxN:8, tdp:700, mem:"hbm", fp4:false},
   {name:"B200", vram:192, tag:"HBM3e", res:4, maxN:8, tdp:1000, mem:"hbm"},
 ];
 
@@ -1465,9 +1476,13 @@ const FRAMEWORK_GIB = 1.2;   // CUDA context + 框架常駐,每張卡都要
 const ACT_FACTOR = 8;        // prefill 期間層間工作緩衝倍率
 const GiB = 1024 ** 3;
 
-// KV 預設 FP8:實務上 KV 量化到 FP8 幾乎不損品質,卻能省近一半 KV,
-// 是目前部署的常態。預設就該反映常態,而非理論上的無損值。
-const state = {wprec:"fp16", kvprec:"fp8"};
+/* wprefer = 使用者「想要」的權重精度,wprec = 當前模型上實際生效的值。
+   兩者分開是必要的:60% 的模型沒有 FP4 權重,若只存一個值,逛過一個
+   不支援的模型後偏好就被覆寫掉,切回支援的模型也回不去(單向退化)。
+   KV 預設 FP8:量化到 FP8 幾乎不損品質卻省近一半,已是部署常態。 */
+const state = {wprefer:"nvfp4", wprec:"nvfp4", kvprec:"fp8"};
+// 偏好不可用時的退讓順序:有 FP4 就用 FP4(不論哪種),都沒有才落到 FP8
+const WPREC_CHAIN = ["nvfp4", "mxfp4", "fp8"];
 let lastSnapshot = null;
 const $ = id => document.getElementById(id);
 const fmt = n => n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
@@ -1561,6 +1576,8 @@ function buildSeg(el, items, key){
     }
     b.setAttribute("aria-pressed", String(state[key] === it.id));
     b.onclick = () => {
+      // 點權重精度 = 表達偏好。偏好要留著,之後換模型才回得來。
+      if (key === "wprec") state.wprefer = it.id;
       state[key] = it.id;
       [...el.children].forEach(c => c.setAttribute("aria-pressed", String(c === b)));
       calc();
@@ -1568,10 +1585,21 @@ function buildSeg(el, items, key){
     return b;
   }));
 }
-// 切換模型後,若目前選的精度該模型不支援,退回 FP8
+/* 依偏好與當前模型決定生效精度。偏好本身可用就用它;不可用才沿 WPREC_CHAIN
+   往下找。關鍵是**不動 state.wprefer** —— 切回支援的模型時才能自動回到 NVFP4。 */
 function normalizeWprec(){
-  if (!fp4Ok(msel.value, state.wprec)) state.wprec = "fp8";
+  state.wprec = fp4Ok(msel.value, state.wprefer)
+    ? state.wprefer
+    : WPREC_CHAIN.find(p => fp4Ok(msel.value, p));
   buildSeg($("wprec"), WPREC, "wprec");
+  // 生效值與偏好不同時要講出來,否則使用者不知道看到的已不是自己選的格式
+  const el = $("wprecNote");
+  if (el){
+    const pref = WPREC.find(x => x.id === state.wprefer);
+    const eff = WPREC.find(x => x.id === state.wprec);
+    el.textContent = state.wprec === state.wprefer ? ""
+      : T("msg.precFallback", pref.label, eff.label);
+  }
 }
 buildSeg($("wprec"), WPREC, "wprec");
 buildSeg($("kvprec"), KVPREC, "kvprec");
@@ -1614,9 +1642,10 @@ document.querySelectorAll(".scn").forEach(c => {
       msel.value = s.model;
       applyModel(s.model);
     }
-    if (s.wprec && fp4Ok(msel.value, s.wprec)){
-      state.wprec = s.wprec;
-      buildSeg($("wprec"), WPREC, "wprec");
+    // 範本指定的精度是「偏好」:走 normalizeWprec 才會把不支援的情況一併處理好
+    if (s.wprec){
+      state.wprefer = s.wprec;
+      normalizeWprec();
     }
     if (s.kvprec){
       state.kvprec = s.kvprec;
@@ -1661,7 +1690,11 @@ function calc(){
   $("fragv").textContent = fragPct + "%";
 
   // 權重:總參數量 × 位元組,量化格式另計 scales/zero-points
-  const weightsB = p * 1e9 * wp.b * (1 + wp.qoh);
+  const weightsAt = id => { const q = WPREC.find(x => x.id === id); return p * 1e9 * q.b * (1 + q.qoh); };
+  const weightsB = weightsAt(state.wprec);
+  // Hopper(H100/H200)沒有 FP4,選 FP4 時那幾列必須改以 FP8 換算才是實際可部署的數字
+  const fp8B = weightsAt("fp8");
+  const needsFp8 = g => wp.fp4 && g.fp4 === false;
 
   // KV Cache。全注意力層隨 ctx 成長;滑窗層上限為 win;線性層(L - Lf - Lsw)不計。
   const isMLA = lat > 0;
@@ -1683,11 +1716,12 @@ function calc(){
   const fwB = FRAMEWORK_GIB * GiB;
   const frag = 1 + fragPct / 100;
 
-  // 單卡(TP=1)總量
-  const perGPU = N => {
+  // 單卡(TP=1)總量。wB 可覆寫權重量,供 Hopper 卡改以 FP8 換算。
+  const perGPUw = (N, wB) => {
     const kvShard = isMLA ? 1 : Math.min(N, Math.max(kvh, 1)); // MLA 在 TP 下各卡複製
-    return (weightsB / N + kvB / kvShard + actB / N + fwB) * frag;
+    return (wB / N + kvB / kvShard + actB / N + fwB) * frag;
   };
+  const perGPU = N => perGPUw(N, weightsB);
 
   // 各列為未加餘裕的實量,餘裕全部歸入「框架 + 餘裕」列,確保加總 == 合計
   const baseB = weightsB + kvB + actB + fwB;
@@ -1724,14 +1758,17 @@ function calc(){
   const fits = [];
   $("gpu").innerHTML = GPUS.map(g => {
     const usable = g.vram - g.res;
+    const gw = needsFp8(g) ? fp8B : weightsB;   // Hopper 無 FP4 → 該列改以 FP8 計
     let n = 0;
     for (let N = 1; N <= g.maxN; N *= 2){
-      if (perGPU(N) / GiB <= usable){ n = N; break; }
+      if (perGPUw(N, gw) / GiB <= usable){ n = N; break; }
     }
-    if (n) fits.push({g, n, usable});
+    if (n) fits.push({g, n, usable, gw});
     const cls = !n ? "over" : n === 1 ? "ok" : "warn";
     const txt = !n ? T("gpu.over", g.maxN) : n === 1 ? T("gpu.single") : T("gpu.multi", n);
-    return `<tr><td class="name mem-${g.mem}">${g.name}<br><span class="tagline">${TD(`g.${g.name}.tag`, g.tag)}</span></td>`
+    const tag = TD(`g.${g.name}.tag`, g.tag)
+      + (needsFp8(g) ? ` · <span style="color:var(--warn)">${T("gpu.noFp4")}</span>` : "");
+    return `<tr><td class="name mem-${g.mem}">${g.name}<br><span class="tagline">${tag}</span></td>`
       + `<td class="vram">${g.vram} GiB</td><td class="vram">${usable} GiB</td>`
       + `<td>${n ? n + "×" : "—"}</td>`
       + `<td class="vram">${n ? money(yearlyCost(g) * n) : "—"}</td>`
@@ -1756,11 +1793,12 @@ function calc(){
   const best = single || multi;
   if (best){
     const watt = best.g.tdp * best.n, kwh = watt * util * 8760 / 1000;
-    const headroom = best.usable - perGPU(best.n) / GiB;
+    const perCard = perGPUw(best.n, best.gw) / GiB;   // 用該卡的換算值,才與表格一致
+    const headroom = best.usable - perCard;
     const cell = (k, v, u) => `<div class="cell"><div class="k">${k}</div><div class="v">${v}${u ? `<small>${u}</small>` : ""}</div></div>`;
     $("rec").innerHTML =
       cell(T("rec.config"), `${best.n}×`, best.g.name.split(" ")[0] === "EdgeXpert" ? "EdgeXpert" : best.g.name.replace(/ Blackwell| \(GB10\)/, "")) +
-      cell(T("rec.perCard"), fmt(perGPU(best.n) / GiB), "GiB") +
+      cell(T("rec.perCard"), fmt(perCard), "GiB") +
       cell(T("rec.headroom"), fmt(Math.max(headroom, 0)), "GiB") +
       cell(T("rec.peakW"), watt.toLocaleString(LOCALE), "W") +
       cell(T("rec.kwh"), Math.round(kwh).toLocaleString(LOCALE), "kWh") +
@@ -1809,7 +1847,8 @@ function flash(msg, isErr){
 // 舊版(ctx 還是 number input 時)產生的設定碼因此仍可正確還原。
 const CFG_IDS = ["users","frag","params","layers","hidden","lfull","lswa","win","kvheads","headdim","latent","vocab","chunk","rate","util"];
 const cfgEncode = () => {
-  const o = {m: msel.value, w: state.wprec, k: state.kvprec, ctx: getCtx()};
+  // 存偏好而非生效值:對方載入後由 normalizeWprec() 依模型重算,語意才一致
+  const o = {m: msel.value, w: state.wprefer, k: state.kvprec, ctx: getCtx()};
   CFG_IDS.forEach(id => o[id] = $(id).value);
   return btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 };
@@ -1822,7 +1861,8 @@ function cfgApply(code){
     if (tgt.grp === "old" && !$("showOld").checked){ $("showOld").checked = true; buildModelList(); }
     msel.value = o.m; applyModel(o.m);
   }
-  if (WPREC.some(x => x.id === o.w) && fp4Ok(msel.value, o.w)) state.wprec = o.w;
+  // 設定碼存的是偏好;normalizeWprec() 會依目標模型算出生效值
+  if (WPREC.some(x => x.id === o.w)) state.wprefer = o.w;
   if (KVPREC.some(x => x.id === o.k)) state.kvprec = o.k;
   normalizeWprec();
   buildSeg($("kvprec"), KVPREC, "kvprec");
