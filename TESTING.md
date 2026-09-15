@@ -263,6 +263,26 @@ console.log(i18nCoverage('en'));
 - [ ] 畫面上不得出現裸 key(如 `head.title`)。注意 `body.textContent` 在 jsdom
       會含 `<script>` 原始碼,掃到的會是字典自己的 key —— 必須只掃元素的文字子節點
 - [ ] 上下文選單分組比較用「原文 `o.g`」而非譯文;譯文可能讓相鄰兩組看起來相同而被合併
+- [ ] **覆蓋率 100% ≠ 畫面乾淨**。漏標 `data-i18n`、或譯文夾雜中文標點,覆蓋率照樣滿分。
+      §4.5 會逐一掃文字節點、`title`/`aria-label`/`placeholder` 屬性、以及 `option`/`optgroup`
+- [ ] **語言選擇器本身豁免中文檢查**:語言名稱應使用該語言自己的寫法(endonym),
+      德文使用者要看到 "Deutsch" 而非 "German"
+- [ ] 模型名稱走 `TD("m.<id>.name", m.name)`:多數語言中性,只有「自訂」那筆需要翻
+
+### 版面必須逐語系測
+
+```powershell
+npm run test:visual        # zh-TW
+npm run test:visual:en     # en(英文字串較長,破版風險較高)
+```
+
+- [ ] **P2 踩過的坑**:說明面板高度隨語系變動,英文版比中文高,手機上整段掉到畫面外
+      (`y=-342 h=726 vh=812`)。`.tip` 的高度上限由 JS 依可用空間動態設定,不可寫死
+- [ ] `place()` 量的是**容器**(`.lbl-row` / `.actions`)而非按鈕 —— 面板是
+      `position:absolute` 錨在容器上,CSS 的 `calc(100% + 8px)` 也是相對容器算。
+      拿按鈕座標會差一截(當時卡在 `y=-2` 就是這個原因)
+- [ ] `place()` 內量自然高度前必須先清掉 `maxHeight`,否則量到的是上次設的上限
+- [ ] 新增語系後,務必為該語系跑一次 `node test/visual.js <lang>`
 
 ---
 

@@ -58,14 +58,35 @@ let enDom;
     d.documentElement.style.getPropertyValue("--cjk-font"));
 }
 
-console.log("\n== 3. 未翻譯者回退繁中(而非空白或裸 key)==");
+console.log("\n== 3. 缺 key 的回退行為(合成測試)==");
 {
-  const { d } = enDom;
-  const foot = d.querySelector("footer").textContent;
-  t("頁尾回退為繁中(P2 待譯)", /計算模型/.test(foot), foot.slice(0, 40));
-  t("回退內容非空", foot.trim().length > 200, String(foot.trim().length));
+  const { w, d } = enDom;
+  // 不依賴「剛好有沒翻完的 key」:直接註冊一個只存在於 zh-TW 的 key 來驗證回退鏈。
+  w.eval(`DICT["zh-TW"]["__probe"] = "回退成功";`);
+  t("缺 key 時回退到 zh-TW", w.eval(`T("__probe")`) === "回退成功", w.eval(`T("__probe")`));
+  t("兩本字典都沒有時,TD() 用呼叫端原文",
+    w.eval(`TD("__nope", "原文保留")`) === "原文保留", w.eval(`TD("__nope","原文保留")`));
+  t("兩本字典都沒有時,Tmaybe() 回 undefined",
+    w.eval(`Tmaybe("__nope") === undefined`));
+
+  // 缺 key 不得清空 DOM(P1 踩過:頁尾整段被覆蓋成裸字串 "foot")
+  const footEl = d.querySelector("footer");
+  const before = footEl.innerHTML;
+  footEl.setAttribute("data-i18n-html", "__definitely_missing");
+  w.eval("applyI18n()");
+  t("缺 key 時保留原內容而非清空", footEl.innerHTML === before,
+    `${before.length} → ${footEl.innerHTML.length}`);
+  footEl.setAttribute("data-i18n-html", "foot");
+  w.eval("applyI18n()");
+
+  const foot = footEl.textContent;
+  t("頁尾已完成英譯(P2)", /The model/.test(foot) && !/[一-龥]/.test(foot),
+    foot.slice(0, 50));
   const badge = d.getElementById("attnBadge").textContent;
-  t("模型架構描述回退繁中", badge.length > 0 && !badge.includes("m."), badge);
+  t("模型架構描述已英譯", badge.length > 0 && !/[一-龥]/.test(badge), badge);
+
+  // 探針用完必須清掉,否則它會被 §4 的覆蓋率當成「en 漏譯的 key」
+  w.eval(`delete DICT["zh-TW"]["__probe"];`);
   // 只看「畫面上看得到的文字」:body.textContent 會把 <script> 原始碼也算進去,
   // 掃到的會是字典自己的 key 而非渲染結果。
   const visible = [...d.body.querySelectorAll("*")]
@@ -89,6 +110,45 @@ console.log("\n== 4. 翻譯覆蓋率報告 ==");
   t("UI 骨架已全數翻譯(缺漏僅限長篇論述與模型描述)",
     c.missing.every(k => /^(tip\.|foot$|arch\.foot$|m\.)/.test(k)),
     c.missing.filter(k => !/^(tip\.|foot$|arch\.foot$|m\.)/.test(k)).join(","));
+}
+
+console.log("\n== 4.5 英文版畫面上不得殘留中文 ==");
+{
+  // 覆蓋率 100% 只證明 key 存在,不證明畫面乾淨:
+  // 漏標 data-i18n、或譯文裡夾雜中文標點,覆蓋率都照樣滿分。
+  const { d } = enDom;
+  const cjk = /[一-龥]/;
+  const offenders = [];
+  // 語言選擇器豁免:語言名稱本就該用該語言自己的寫法(endonym),
+  // 德文使用者要在選單裡看到 "Deutsch" 而不是 "German"。
+  const walk = el => {
+    if (["SCRIPT", "STYLE"].includes(el.tagName) || el.id === "lang") return;
+    [...el.childNodes].forEach(n => {
+      if (n.nodeType === 3 && cjk.test(n.textContent))
+        offenders.push(`<${el.tagName.toLowerCase()}> "${n.textContent.trim().slice(0, 45)}"`);
+      else if (n.nodeType === 1) walk(n);
+    });
+  };
+  walk(d.body);
+  t("無中文文字節點殘留", offenders.length === 0, offenders.slice(0, 5).join(" ／ "));
+
+  // 屬性也要檢查:title / aria-label / placeholder 漏譯不會出現在文字節點裡
+  const attrBad = [];
+  d.querySelectorAll("*").forEach(el => {
+    ["title", "aria-label", "placeholder"].forEach(a => {
+      const v = el.getAttribute(a);
+      if (v && cjk.test(v)) attrBad.push(`${el.tagName.toLowerCase()}[${a}]="${v.slice(0, 40)}"`);
+    });
+  });
+  t("無中文屬性殘留(title / aria-label / placeholder)",
+    attrBad.length === 0, attrBad.slice(0, 5).join(" ／ "));
+
+  // 選單選項的 text 不在文字節點掃描範圍內,單獨檢查
+  const optBad = [...d.querySelectorAll("option, optgroup")]
+    .filter(o => o.closest("#lang") === null)      // 同上,語言選單豁免
+    .map(o => o.label || o.textContent)
+    .filter(s => cjk.test(s));
+  t("選單選項與分組無中文殘留", optBad.length === 0, optBad.slice(0, 5).join(" ／ "));
 }
 
 console.log("\n== 5. 執行期切換語系保留狀態 ==");

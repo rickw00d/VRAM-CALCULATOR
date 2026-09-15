@@ -114,6 +114,9 @@
     width:min(420px,88vw); padding:14px 16px; border-radius:12px;
     background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow);
     font-size:.76rem; color:var(--text-2); line-height:1.5;
+    /* 上限由 JS 依可用空間設定(面板高度隨語系變動,寫死擋不住);
+       內容超出就在面板內捲動,不讓任何一截落在畫面外 */
+    overflow-y:auto; overscroll-behavior:contain;
   }
   /* ~ 而非 +:DOM 上 .tipbtn 與 .tip 中間隔著 #fragv,不是緊鄰的下一個手足,
      用 + 這個選擇器永遠不會命中(踩過一次的坑) */
@@ -226,7 +229,7 @@
       <p class="sub" data-i18n="head.sub">輸入模型與工作負載條件,即時估算 GPU 記憶體需求,並比對加速卡落點。已計入 GQA/MLA 分片限制與統一記憶體的系統保留。</p>
     </div>
     <div class="hdr-ctl">
-      <select class="lang-sel" id="lang" aria-label="Language / 語言"></select>
+      <select class="lang-sel" id="lang" data-i18n-attr="aria-label:lang.aria" aria-label="語言"></select>
       <button class="theme-btn" id="themeBtn"><span id="themeIcon" aria-hidden="true">◐</span><span id="themeTxt">主題</span></button>
     </div>
   </header>
@@ -539,6 +542,9 @@ const DICT = {
   "csv.memItem":"記憶體項目", "csv.infeasible":"不可行",
 
   "ctx.custom":"自訂…",
+  "lang.aria":"語言",
+  // 模型名稱多半語言中性(Qwen3.8 27B…),只有「自訂」這筆要翻
+  "m.custom.name":"— 自訂 (Custom) —",
   "theme.dark":"深色", "theme.light":"淺色",
   "theme.aria": to => `切換至${to}主題`,
 
@@ -687,6 +693,8 @@ const DICT = {
   "csv.memItem":"Memory component", "csv.infeasible":"not viable",
 
   "ctx.custom":"Custom…",
+  "lang.aria":"Language",
+  "m.custom.name":"— Custom —",
   "theme.dark":"Dark", "theme.light":"Light",
   "theme.aria": to => `Switch to ${to} theme`,
 
@@ -720,6 +728,86 @@ const DICT = {
   "g.RTX Spark (N1x).tag":"Unified memory · up to 128 GiB",
   "g.Jetson AGX Thor.tag":"Unified memory",
   "g.EdgeXpert / DGX Spark (GB10).tag":"Unified memory",
+
+  /* 模型架構描述。術語與上方 UI 一致:full-attn / sliding / local / global / linear。
+     分隔符沿用原設計:「·」分架構類型,「|」分活躍參數量(英文不用全形｜)。 */
+  "m.custom.t":"Custom",
+  "m.gptoss-20b.t":"MoE · GQA + banded sparse | 3.6B active",
+  "m.gptoss-120b.t":"MoE · GQA + banded sparse | 5.1B active",
+  "m.qwen36-27b.t":"Dense · 48×DeltaNet + 16×GQA",
+  "m.qwen38-27b.t":"Dense · 48×DeltaNet + 16×GQA",
+  "m.qwen36-35b.t":"MoE · 30×DeltaNet + 10×GQA | 3B active",
+  "m.qwen35-397b.t":"MoE · 45×DeltaNet + 15×GQA | 17B active",
+  "m.nemotron35-light.t":"MoE · 24×Mamba-2 + 6×attention + 22×MoE | 3.6B active",
+  "m.nemotron3-super.t":"MoE · 44×Mamba-2 + 22×attention + 22×MoE | 12B active",
+  "m.glimmer-30b.t":"Dense · 39×local (w2048) + 13×global",
+  "m.gemma4-26b.t":"MoE · 26×sliding (w1024) + 4×global | 4B active",
+  "m.gemma4-31b.t":"Dense · 50×sliding (w1024) + 10×global",
+  "m.deepseek-v4-flash.t":"MoE · MLA + DSA | 13B active",
+  "m.deepseek-v4-pro.t":"MoE · MLA + DSA | 49B active",
+  "m.glm52.t":"MoE · MLA + DSA | 40B active",
+  "m.minimax-m25.t":"MoE · plain GQA (full attention on every layer) | 10B active",
+  "m.kimi-k26.t":"MoE · MLA (all layers) | 32B active",
+  "m.kimi-k3.t":"MoE · 69×KDA + 25×Gated MLA | 104B active",
+  "m.qwen38-max.t":"MoE · 69×linear + 23×full-attn | 95B active",
+  "m.qwen3-8b.t":"Dense · GQA (full attention on every layer)",
+  "m.qwen3-14b.t":"Dense · GQA (full attention on every layer)",
+  "m.qwen3-32b.t":"Dense · GQA (full attention on every layer)",
+  "m.qwen3-30b-a3b.t":"MoE · GQA | 3B active",
+  "m.qwen3-235b.t":"MoE · GQA | 22B active",
+  "m.llama4-scout.t":"MoE · GQA | 17B active",
+  "m.llama4-mav.t":"MoE · GQA | 17B active",
+  "m.glm46.t":"MoE · GQA | 32B active",
+  "m.deepseek-v31.t":"MoE · MLA | 37B active",
+  "m.deepseek-v32.t":"MoE · MLA | 37B active",
+
+  "m.gemma4-31b.q":"Readings of the config disagree on the full-attention layer count (8 vs 10); the more conservative 10 is used. Global layers carry global_head_dim 512, but 256 is assumed here.",
+  "m.deepseek-v4-flash.q":"The config ships no layer-type array, so all 43 layers are counted — a deliberately conservative estimate. DeepSeek states that DSA sparse attention cuts KV to roughly 10% of V3.2 at 1M context.",
+  "m.deepseek-v4-pro.q":"The config ships no layer-type array, so all 61 layers are counted — a deliberately conservative estimate.",
+  "m.qwen38-max.q":"No official public weights (Hugging Face carries only third-party distills and quantizations), so the entire architecture is inferred; hidden size and KV heads are unverified.",
+
+  // ---- 長篇論述 ----
+  "arch.foot":`<strong>Total layers ≠ layers that hold KV.</strong> Linear-attention layers (Mamba / DeltaNet) keep a fixed-size state and contribute no KV; sliding-window layers cap their KV at the window size.
+            MoE weights count the <em>total</em> parameters (every expert stays resident); when <code>MLA latent</code> &gt; 0 the compressed path applies (no ×2).`,
+
+  "tip.frag":`<strong class="tip-h">Why the three presets use different headroom</strong>
+              <div class="tip-scroll">
+                <table>
+                  <thead><tr><th>Preset</th><th>Concurrency</th><th>Context</th><th>Headroom</th><th>Why</th></tr></thead>
+                  <tbody>
+                    <tr><td>Digital human / support</td><td>48</td><td>4K</td><td><b>10%</b></td><td>Many short sequences — each pays for one partly-filled final block, so the wasted fraction is highest</td></tr>
+                    <tr><td>Enterprise RAG</td><td>16</td><td>16K</td><td><b>8%</b></td><td>In between</td></tr>
+                    <tr><td>Long documents</td><td>4</td><td>128K</td><td><b>6%</b></td><td>Few long sequences — the tail waste is amortized over a very long sequence, so the fraction is lowest</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <strong class="tip-h tip-h2">Setting it yourself</strong>
+              <ul>
+                <li><b>0%</b> — the theoretical floor. Use it to answer "what is the absolute minimum?", never to make a purchasing decision</li>
+                <li><b>8%</b> — typical vLLM steady state</li>
+                <li><b>15–25%</b> — long-running services, highly variable load, frequent LoRA swaps</li>
+              </ul>`,
+
+  "tip.act":`<strong class="tip-h">What these three buttons do</strong>
+            <dl>
+              <dt>Copy CSV</dt>
+              <dd>Copies the estimate table (model weights, KV cache, total, and so on) in spreadsheet format, ready to paste into Excel or Google Sheets for further analysis.</dd>
+              <dt>Copy config code</dt>
+              <dd>Packs every current setting (model, precision, context, all parameters) into one short string. Send it to a colleague — pasting it into "Load config code" reproduces exactly what you are seeing.</dd>
+              <dt>Load config code</dt>
+              <dd>Paste a config code from someone else, or one you saved earlier, to restore the whole setup in one step. A URL can also carry one as <code>#cfg=…</code>, which restores automatically on load.</dd>
+            </dl>`,
+
+  "foot":`<strong>The model</strong>: total = (weights + KV cache + activations) ÷ parallel size + framework residency, multiplied by the fragmentation headroom.<br>
+    Weights = total parameters × bytes per parameter (MoE counts every expert; INT4/INT8/FP8 add the scale overhead of group-wise quantization).<br>
+    <strong>KV cache is computed separately per layer type</strong>: <code>2 × KVheads × headdim × bytes × (full-attn layers × context + sliding layers × min(context, window)) × concurrency</code>.
+    Linear-attention layers (Mamba / Gated DeltaNet / KDA) hold a fixed-size state that does not grow with context, so they are excluded. MLA takes the compressed path <code>latent × …</code> (no ×2).
+    <strong>Total layers ≠ layers that hold KV</strong> — most 2026 models are hybrids, and using the total layer count overestimates by several times.<br>
+    <strong>Tensor parallelism (TP)</strong> is a power of two. GQA shards its KV at most <code>KV heads</code> ways; <strong>MLA replicates its KV on every GPU and does not shrink with TP</strong> — the usual reason DeepSeek-style models get underestimated.<br>
+    All figures are GiB (2³⁰ bytes). <strong>An accelerator's advertised "96GB" is already a 2³⁰ figure</strong> — video memory is built from power-of-two dies, and nvidia-smi reports 81,920 MiB (= 80 GiB) for an "80GB" H100. This table therefore labels everything in GiB and applies no decimal conversion. Unified-memory machines (EdgeXpert/DGX Spark (GB10), Jetson Thor, RTX Spark (N1x)) already have their OS/CPU reserve deducted. Real usage still varies with vLLM / TensorRT-LLM allocation strategy, so treat these as engineering estimates rather than guarantees. Model architectures are published reference specs — defer to the official config.<br>
+    <strong>Power cost</strong> = TDP × utilization × 8,760 hours × rate, for the accelerator alone — no host, cooling, or PUE. TDP is a typical board-power reference (whole-system for unified-memory machines) and varies with SKU and thermal configuration.<br>
+    <strong>4-bit block floating point</strong>: NVFP4 shares one FP8 (E4M3) scale per 16 elements (+12.5%), MXFP4 one E8M0 scale per 32 (+6.25%), so neither occupies the same space as plain INT4.
+    A struck-through format means no public weights exist for that model and it cannot be selected; NVFP4 also needs Blackwell-generation hardware for native acceleration.`,
 },
 };
 
@@ -944,12 +1032,13 @@ const msel = $("model");
 function buildModelList(){
   const keep = msel.value;
   const showOld = $("showOld")?.checked;
-  msel.replaceChildren(new Option(MODELS[0].name, "custom"));
+  // 模型名稱多半語言中性(Qwen3.8 27B…),查不到 key 就用原名
+  msel.replaceChildren(new Option(TD("m.custom.name", MODELS[0].name), "custom"));
   ["A", "B", "C", ...(showOld ? ["old"] : [])].forEach(g => {
     const og = document.createElement("optgroup");
     og.label = TD(`grp.${g}`, GRP_LABEL[g]);
     MODELS.filter(m => m.grp === g && m.id !== "custom")
-      .forEach(m => og.append(new Option(m.name, m.id)));
+      .forEach(m => og.append(new Option(TD(`m.${m.id}.name`, m.name), m.id)));
     msel.append(og);
   });
   msel.value = [...msel.options].some(o => o.value === keep) ? keep : "qwen38-27b";
@@ -1354,13 +1443,24 @@ document.querySelectorAll(".tipbtn").forEach(btn => {
   const place = () => {
     // 此刻面板可能還是 display:none,offsetHeight 會是 0;先借顯示量完再還原
     const hidden = getComputedStyle(tip).display === "none";
+    tip.style.maxHeight = "";   // 先解除上次設的上限,否則量到的是上限而非自然高度
     if (hidden){ tip.style.visibility = "hidden"; tip.style.display = "block"; }
     const h = tip.offsetHeight;
     if (hidden){ tip.style.display = ""; tip.style.visibility = ""; }
-    const r = btn.getBoundingClientRect();
-    const below = innerHeight - r.bottom - 12, above = r.top - 12;
+    /* 量容器而非按鈕:面板是 position:absolute 錨在 .lbl-row / .actions 上,
+       CSS 的 top/bottom:calc(100% + 8px) 也是相對容器算的。拿按鈕座標會差一截。
+       GAP 必須跟 CSS 那個 8px 一致,SAFE 留一點邊避免貼齊視窗邊緣。 */
+    const ar = (tip.offsetParent || tip.parentElement).getBoundingClientRect();
+    const GAP = 8, SAFE = 8;
+    const below = innerHeight - ar.bottom - GAP - SAFE;
+    const above = ar.top - GAP - SAFE;
     // 下方放得下就維持往下開;放不下、且上方確實比較寬裕時才翻上去
-    tip.classList.toggle("tip-up", below < h && above > below);
+    const up = below < h && above > below;
+    tip.classList.toggle("tip-up", up);
+    // 翻面之後仍可能塞不下(英文面板比中文高,手機上尤其明顯)。
+    // 依所選方向的可用空間收斂高度,超出的部分在面板內捲動。
+    const room = Math.max(up ? above : below, 140);
+    tip.style.maxHeight = h > room ? room + "px" : "";
   };
   btn.addEventListener("mouseenter", place);
   btn.addEventListener("focus", place);

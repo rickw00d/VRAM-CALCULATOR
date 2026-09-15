@@ -157,6 +157,11 @@ async function checkKeyboard(page, tip) {
   console.log(`瀏覽器:${channel}   位址:${base}\n`);
   const errors = [];
 
+  // 語系可指定:`node test/visual.js en`。英文/歐語字串比中文長,
+  // 破版風險集中在精度按鈕列與推薦配置格,必須能逐語系量。
+  const LANG = process.argv[2] || "zh-TW";
+  console.log(`語系:${LANG}\n`);
+
   for (const [theme, vw, vh] of [["light", 1280, 950], ["dark", 1280, 950], ["light", 375, 812]]) {
     console.log(`== ${theme} ${vw}×${vh} ==`);
     const page = await browser.newPage({ viewport: { width: vw, height: vh }, colorScheme: theme });
@@ -165,8 +170,8 @@ async function checkKeyboard(page, tip) {
     // 外部字型與版面驗證無關,擋掉以免受網路狀況影響
     await page.route("**/fonts.googleapis.com/**", r => r.abort());
     await page.route("**/fonts.gstatic.com/**", r => r.abort());
-    // ?lang=zh-TW:版面測試量的是中文字寬,語系必須釘死才有可比性
-    await page.goto(`${base}/index.html?lang=zh-TW`, { waitUntil: "load", timeout: 20000 });
+    // 語系必須釘死:不帶 ?lang= 會依瀏覽器語言自動切換,量到的字寬就不可比
+    await page.goto(`${base}/index.html?lang=${LANG}`, { waitUntil: "load", timeout: 20000 });
 
     for (const tip of TIPS) await checkTip(page, tip, vw, vh);
     for (const tip of TIPS) await checkAutoFlip(page, tip, vw, vh);
