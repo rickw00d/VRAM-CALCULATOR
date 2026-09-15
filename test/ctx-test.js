@@ -196,8 +196,10 @@ t("按鈕文字隨主題更新", $("themeTxt").textContent === "淺色", $("them
 console.log("\n== 14. 模型規格來源追溯(Review P3)==");
 const models = ev("MODELS");
 const noSrc = models.filter(m => m.id !== "custom" && !m.src).map(m => m.id);
-t("28 個內建模型中 27 個有 src", models.length - 1 - noSrc.length === 27,
-  `無 src: ${noSrc.join(",") || "(無)"}`);
+// 不寫死模型總數 —— 每新增一個模型就得改一次的斷言,只會製造假失敗。
+// 真正要守的是「除了已知例外,其餘一律要有 src」,下一項負責。
+t("僅一個內建模型缺 src", noSrc.length === 1,
+  `共 ${models.length - 1} 個內建模型,無 src: ${noSrc.join(",") || "(無)"}`);
 t("唯一無 src 者為 qwen38-max", noSrc.length === 1 && noSrc[0] === "qwen38-max", noSrc.join(","));
 t("無 src 者必須帶 q 註記說明",
   noSrc.every(id => /無官方公開權重/.test(models.find(m => m.id === id).q || "")));

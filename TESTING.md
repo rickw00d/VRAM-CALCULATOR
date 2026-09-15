@@ -149,7 +149,8 @@ nvidia-smi 對「80GB」H100 回報 81,920 MiB(= 80 GiB)。因此 `g.vram - g.re
 }console.log('src 檢查完成')})();
 ```
 
-- [ ] 28 個內建模型中 27 個有 `src`,唯一例外是 Qwen3.8-Max(無官方公開權重,僅第三方蒸餾/量化)
+- [ ] **僅一個**內建模型缺 `src`,且必須是 Qwen3.8-Max(無官方公開權重,僅第三方蒸餾/量化)。
+      斷言刻意不寫死模型總數 —— 每加一個模型就得改一次的數字,只會製造假失敗
 - [ ] 無 `src` 者必須在 `q:` 中明講「無官方公開權重」,UI 也要顯示該說明而非留白
 - [ ] NVIDIA 兩個 Nemotron 指向 `-BF16` 版 —— 無後綴的 repo 需授權(HF API 回 401)
 - [ ] 選中模型時 `#srcLink` 顯示指向 `config.json` 的連結,且帶 `rel="noopener noreferrer"`
@@ -179,7 +180,8 @@ const NV = {"qwen36-35b":"nvidia/Qwen3.6-35B-A3B-NVFP4","qwen3-8b":"nvidia/Qwen3
       NVFP4 被 `fp4Ok()` 擋下並**靜默退回 FP16** —— 這種失敗不會報錯,只會算出錯誤答案
 - [ ] Gemma 4 26B-A4B **不可**選 NVFP4(NVIDIA 支援表對它只有 Base,HF 的 NVFP4 repo 回 401)
 - [ ] gpt-oss 20B/120B 仍只支援 MXFP4,不得出現 NVFP4
-- [ ] 全模型×全精度掃描應為 **153** 組(修此表前為 149,四個新增模型各 +1)
+- [ ] 全模型×全精度掃描:**零 NaN/Infinity 是驗收標準,組數本身不必對答案**
+      (組數隨模型與 FP4 支援表增減,寫死只會每次加模型都假失敗)
 - [ ] agent 範本應同時設定 model / wprec / kvprec / ctx / users / frag / chunk 七項
 - [ ] **順序回歸點**:`applyModel()` 內會呼叫 `normalizeWprec()` 重建精度按鈕並可能退回 FP8,
       所以範本套用時模型必須先於精度。若順序顛倒,wprec 會被覆蓋成 FP8 而測試會抓到權重變大
